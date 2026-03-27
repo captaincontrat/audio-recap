@@ -33,13 +33,23 @@ pnpm process:meeting \
   --out-dir "./out"
 ```
 
+Sans notes:
+
+```bash
+pnpm process:meeting \
+  --audio "./Rue Saint-Honoré.m4a" \
+  --out-dir "./out"
+```
+
 Options:
 
 - `--audio`: chemin vers le fichier audio source.
-- `--notes`: chemin vers les notes du meeting.
+- `--notes`: chemin facultatif vers les notes du meeting.
 - `--out-dir`: dossier de sortie pour `transcript.md` et `summary.md`.
 - `--language`: indice facultatif de langue pour la transcription et le résumé.
 - `--keep-temp`: conserve les artefacts intermédiaires `ffmpeg`.
+
+Quand `--notes` est omis, le résumé est généré uniquement à partir du transcript diarizé. Le résultat reste utile, mais peut être moins bien structuré ou moins contextualisé qu'avec de vraies notes de réunion.
 
 ## Pipeline
 
@@ -98,7 +108,8 @@ Le résumé est généré avec la Responses API et `gpt-5.4` en `reasoning: { ef
 
 Le prompt:
 
-- analyse d'abord les notes pour proposer la meilleure structure,
+- analyse d'abord les notes quand elles sont disponibles pour proposer la meilleure structure,
+- bascule sur le transcript seul si aucune note n'est fournie,
 - recoupe cette structure avec le transcript,
 - reste fidèle au matériau fourni,
 - évite d'inventer décisions, actions ou risques non supportés.

@@ -3,7 +3,7 @@ import type { PreparedAudioFile } from "../audio/ffmpeg.js";
 
 export function renderTranscriptMarkdown(input: {
   audioPath: string;
-  notesPath: string;
+  notesPath?: string;
   generatedAt: string;
   preparedAudio: PreparedAudioFile;
   segments: TranscriptSegment[];
@@ -12,7 +12,7 @@ export function renderTranscriptMarkdown(input: {
     "# Transcript du meeting",
     "",
     `- Audio source: \`${input.audioPath}\``,
-    `- Notes source: \`${input.notesPath}\``,
+    `- Notes source: ${formatNotesSource(input.notesPath)}`,
     "- Modèle de transcription: `gpt-4o-transcribe-diarize`",
     `- Prétraitement audio: vitesse \`x${input.preparedAudio.speedMultiplier}\`, format \`${input.preparedAudio.formatName}\``,
     `- Découpage: \`${input.preparedAudio.chunks.length}\` partie(s) avec overlap \`${input.preparedAudio.overlapSec}s\` quand nécessaire`,
@@ -38,15 +38,20 @@ export function renderTranscriptMarkdown(input: {
 
 export function renderSummaryMarkdown(input: {
   audioPath: string;
-  notesPath: string;
+  notesPath?: string;
   generatedAt: string;
   summary: string;
 }): string {
   const header = [
-    `<!-- Generated from ${input.audioPath} and ${input.notesPath} -->`,
+    `<!-- Audio source: ${input.audioPath} -->`,
+    `<!-- Notes source: ${input.notesPath ?? "none"} -->`,
     `<!-- Generated at ${input.generatedAt} with gpt-5.4 reasoning high -->`,
     "",
   ];
 
   return [...header, input.summary.trim(), ""].join("\n");
+}
+
+function formatNotesSource(notesPath?: string): string {
+  return notesPath ? `\`${notesPath}\`` : "none";
 }

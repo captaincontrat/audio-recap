@@ -16,10 +16,15 @@ import { renderSummaryMarkdown, renderTranscriptMarkdown } from "./render/markdo
 async function main(): Promise<void> {
   const options = parseCommandLine(process.argv.slice(2));
   const resolvedAudioPath = path.resolve(options.audio);
-  const resolvedNotesPath = path.resolve(options.notes);
+  const resolvedNotesPath = options.notes ? path.resolve(options.notes) : undefined;
   const resolvedOutDir = path.resolve(options.outDir);
 
-  await Promise.all([assertReadableFile(resolvedAudioPath), assertReadableFile(resolvedNotesPath)]);
+  await assertReadableFile(resolvedAudioPath);
+
+  if (resolvedNotesPath) {
+    await assertReadableFile(resolvedNotesPath);
+  }
+
   await mkdir(resolvedOutDir, { recursive: true });
 
   const apiKey = process.env.OPENAI_API_KEY;
@@ -28,7 +33,7 @@ async function main(): Promise<void> {
     throw new Error("Missing OPENAI_API_KEY in the environment.");
   }
 
-  const notesContent = await readFile(resolvedNotesPath, "utf8");
+  const notesContent = resolvedNotesPath ? await readFile(resolvedNotesPath, "utf8") : "";
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "audio-recap-"));
   const generatedAt = new Date().toISOString();
 
@@ -93,7 +98,7 @@ async function main(): Promise<void> {
 
 function parseCommandLine(argv: string[]): {
   audio: string;
-  notes: string;
+  notes?: string;
   outDir: string;
   language?: string;
   keepTemp: boolean;
@@ -131,9 +136,9 @@ function parseCommandLine(argv: string[]): {
     process.exit(0);
   }
 
-  if (!values.audio || !values.notes) {
+  if (!values.audio) {
     printHelp();
-    throw new Error("Missing required arguments: --audio and --notes.");
+    throw new Error("Missing required argument: --audio.");
   }
 
   return {
@@ -158,11 +163,11 @@ async function assertReadableFile(filePath: string): Promise<void> {
 function printHelp(): void {
   console.log(`
 Usage:
-  pnpm process:meeting --audio "/path/to/meeting.m4a" --notes "/path/to/meeting-notes.md" [--out-dir "./out"] [--language "fr"] [--keep-temp]
+  pnpm process:meeting --audio "/path/to/meeting.m4a" [--notes "/path/to/meeting-notes.md"] [--out-dir "./out"] [--language "fr"] [--keep-temp]
 
 Options:
   --audio       Path to the source meeting audio file.
-  --notes       Path to the meeting notes markdown file.
+  --notes       Optional path to the meeting notes markdown file.
   --out-dir     Output directory for transcript.md and summary.md. Defaults to the current directory.
   --language    Optional language hint forwarded to transcription and summary generation.
   --keep-temp   Keep the intermediate ffmpeg artifacts instead of deleting them.

@@ -6,7 +6,7 @@ export async function generateMeetingSummary(
   client: OpenAI,
   input: {
     audioPath: string;
-    notesPath: string;
+    notesPath?: string;
     meetingNotes: string;
     transcriptBlocks: TranscriptBlock[];
     outputLanguage?: string;
@@ -16,7 +16,7 @@ export async function generateMeetingSummary(
     throw new Error("Cannot generate a summary without transcript blocks.");
   }
 
-  const developerPrompt = buildDeveloperPrompt(input.outputLanguage);
+  const developerPrompt = buildDeveloperPrompt(input.outputLanguage, input.meetingNotes.trim().length > 0);
   const userPrompt = buildUserPrompt(input);
   const response = await client.responses.create({
     model: "gpt-5.4",
@@ -52,20 +52,28 @@ export async function generateMeetingSummary(
   return summary;
 }
 
-function buildDeveloperPrompt(outputLanguage?: string): string {
+function buildDeveloperPrompt(outputLanguage?: string, hasMeetingNotes = true): string {
   const languageInstruction = outputLanguage
     ? `Write the summary in ${outputLanguage}.`
-    : "Write the summary in the dominant language of the meeting notes and transcript.";
+    : hasMeetingNotes
+      ? "Write the summary in the dominant language of the meeting notes and transcript."
+      : "Write the summary in the dominant language of the transcript.";
 
   return [
     "Formatting re-enabled",
     "# Identity",
-    "You are an expert meeting analyst who writes faithful, useful summaries from meeting notes and diarized transcripts.",
+    "You are an expert meeting analyst who writes faithful, useful summaries from meeting notes when available and diarized transcripts.",
     "",
     "# Instructions",
-    "- Analyze the meeting notes first to infer the most useful summary structure for this specific meeting.",
-    "- Cross-check the inferred structure against the transcript blocks before writing the summary.",
-    "- Base every substantive claim only on the provided meeting notes and transcript blocks.",
+    hasMeetingNotes
+      ? "- Analyze the meeting notes first to infer the most useful summary structure for this specific meeting."
+      : "- No meeting notes were provided. Infer the most useful summary structure directly from the transcript blocks.",
+    hasMeetingNotes
+      ? "- Cross-check the inferred structure against the transcript blocks before writing the summary."
+      : "- Base the structure, tone, and conclusions only on the transcript blocks.",
+    hasMeetingNotes
+      ? "- Base every substantive claim only on the provided meeting notes and transcript blocks."
+      : "- Base every substantive claim only on the provided transcript blocks.",
     "- Do not invent participants, decisions, action items, dates, deadlines, risks, or technical details.",
     "- If a point is plausible but not clearly supported, mark it as `A confirmer`.",
     "- Prefer concise, information-dense wording over generic management phrasing.",
@@ -83,10 +91,11 @@ function buildDeveloperPrompt(outputLanguage?: string): string {
 
 function buildUserPrompt(input: {
   audioPath: string;
-  notesPath: string;
+  notesPath?: string;
   meetingNotes: string;
   transcriptBlocks: TranscriptBlock[];
 }): string {
+  const normalizedMeetingNotes = input.meetingNotes.trim();
   const transcriptBlockPayload = input.transcriptBlocks
     .map(
       (block) =>
@@ -97,12 +106,12 @@ function buildUserPrompt(input: {
   return [
     "<MEETING_CONTEXT>",
     `Audio file: ${input.audioPath}`,
-    `Notes file: ${input.notesPath}`,
+    `Notes file: ${input.notesPath ?? "none"}`,
     "Transcript timestamps refer to the accelerated x2 preprocessing audio that was sent to transcription.",
     "</MEETING_CONTEXT>",
     "",
     "<MEETING_NOTES>",
-    input.meetingNotes.trim(),
+    normalizedMeetingNotes || "No meeting notes were provided.",
     "</MEETING_NOTES>",
     "",
     "<TRANSCRIPT_BLOCKS>",
