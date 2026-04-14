@@ -6,7 +6,9 @@ settings:
 
 importers:
 
-  .:
+  .: {}
+
+  libs/audio-recap:
     dependencies:
       dotenv:
         specifier: ^17.3.1

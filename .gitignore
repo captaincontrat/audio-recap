@@ -1,6 +1,6 @@
 node_modules
 .env
-out/**
-!out/.keep
+**/out/**
+!**/out/.keep
 *.m4a
 *.mp3

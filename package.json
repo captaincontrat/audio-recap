@@ -1,25 +1,12 @@
 {
-  "name": "audio-recap",
-  "version": "1.0.0",
-  "description": "CLI to transcribe and summarize meeting audio with OpenAI and ffmpeg",
+  "name": "audio-recap-workspace",
+  "private": true,
+  "description": "pnpm workspace for the Audio Recap CLI and future web app",
   "scripts": {
-    "check": "biome check .",
-    "format": "biome format --write .",
-    "lint": "biome lint .",
-    "process:meeting": "tsx src/cli.ts",
-    "typecheck": "tsc --noEmit"
-  },
-  "license": "ISC",
-  "type": "module",
-  "dependencies": {
-    "dotenv": "^17.3.1",
-    "openai": "^6.32.0"
-  },
-  "devDependencies": {
-    "@biomejs/biome": "^2.4.12",
-    "@types/node": "^25.5.0",
-    "tsx": "^4.21.0",
-    "typescript": "^5.9.3"
-  },
-  "private": true
+    "check": "pnpm --filter ./libs/audio-recap check",
+    "format": "pnpm --filter ./libs/audio-recap format",
+    "lint": "pnpm --filter ./libs/audio-recap lint",
+    "process:meeting": "pnpm --filter ./libs/audio-recap process:meeting",
+    "typecheck": "pnpm --filter ./libs/audio-recap typecheck"
+  }
 }

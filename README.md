@@ -1,6 +1,6 @@
 # Audio Recap
 
-CLI `TypeScript + pnpm` pour:
+Monorepo `pnpm` avec, pour l'instant, un CLI `TypeScript` pour:
 
 - accélérer un audio de meeting en `x2` avec `ffmpeg`,
 - le découper si nécessaire sous la limite d'upload OpenAI,
@@ -17,6 +17,13 @@ CLI `TypeScript + pnpm` pour:
 - `OPENAI_API_KEY` dans `.env`
 
 Le SDK utilisé est le SDK officiel Node.js: [openai-node](https://github.com/openai/openai-node).
+
+## Structure
+
+- `libs/audio-recap`: package CLI actuel.
+- `app`: dossier réservé à la future application web.
+
+Les commandes ci-dessous s'exécutent depuis la racine du monorepo et proxy vers `libs/audio-recap`.
 
 ## Installation
 

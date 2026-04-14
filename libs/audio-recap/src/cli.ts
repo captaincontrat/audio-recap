@@ -1,10 +1,10 @@
-import "dotenv/config";
-
 import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
+import { config as loadDotenv } from "dotenv";
 import OpenAI from "openai";
 
 import { DEFAULT_CHUNK_OVERLAP_SEC, prepareAudioForUpload } from "./audio/ffmpeg.js";
@@ -13,11 +13,16 @@ import { generateMeetingSummary } from "./openai/summarize.js";
 import { transcribePreparedAudio } from "./openai/transcribe.js";
 import { renderSummaryMarkdown, renderTranscriptMarkdown } from "./render/markdown.js";
 
+const PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const WORKSPACE_ROOT = path.resolve(PACKAGE_ROOT, "../..");
+
 async function main(): Promise<void> {
+  const invocationCwd = resolveInvocationCwd();
+  loadEnvironment(invocationCwd);
   const options = parseCommandLine(process.argv.slice(2));
-  const resolvedAudioPath = path.resolve(options.audio);
-  const resolvedNotesPath = options.notes ? path.resolve(options.notes) : undefined;
-  const resolvedOutDir = path.resolve(options.outDir);
+  const resolvedAudioPath = path.resolve(invocationCwd, options.audio);
+  const resolvedNotesPath = options.notes ? path.resolve(invocationCwd, options.notes) : undefined;
+  const resolvedOutDir = path.resolve(invocationCwd, options.outDir);
 
   await assertReadableFile(resolvedAudioPath);
 
@@ -144,10 +149,25 @@ function parseCommandLine(argv: string[]): {
   return {
     audio: values.audio,
     notes: values.notes,
-    outDir: values["out-dir"] ?? process.cwd(),
+    outDir: values["out-dir"] ?? ".",
     language: values.language,
     keepTemp: values["keep-temp"] ?? false,
   };
+}
+
+function resolveInvocationCwd(): string {
+  return process.env.INIT_CWD ? path.resolve(process.env.INIT_CWD) : process.cwd();
+}
+
+function loadEnvironment(invocationCwd: string): void {
+  const envPaths = new Set([path.join(invocationCwd, ".env"), path.join(WORKSPACE_ROOT, ".env")]);
+
+  for (const envPath of envPaths) {
+    loadDotenv({
+      path: envPath,
+      override: false,
+    });
+  }
 }
 
 async function assertReadableFile(filePath: string): Promise<void> {
