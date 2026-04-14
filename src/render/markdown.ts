@@ -1,5 +1,5 @@
-import { formatTimestamp, type TranscriptSegment } from "../domain/transcript.js";
 import type { PreparedAudioFile } from "../audio/ffmpeg.js";
+import { formatTimestamp, type TranscriptSegment } from "../domain/transcript.js";
 
 export function renderTranscriptMarkdown(input: {
   audioPath: string;
@@ -33,15 +33,10 @@ export function renderTranscriptMarkdown(input: {
         ])
       : ["Aucun segment n'a été retourné par la transcription.", ""];
 
-  return [...metadataLines, ...segmentLines].join("\n").trimEnd() + "\n";
+  return `${[...metadataLines, ...segmentLines].join("\n").trimEnd()}\n`;
 }
 
-export function renderSummaryMarkdown(input: {
-  audioPath: string;
-  notesPath?: string;
-  generatedAt: string;
-  summary: string;
-}): string {
+export function renderSummaryMarkdown(input: { audioPath: string; notesPath?: string; generatedAt: string; summary: string }): string {
   const header = [
     `<!-- Audio source: ${input.audioPath} -->`,
     `<!-- Notes source: ${input.notesPath ?? "none"} -->`,

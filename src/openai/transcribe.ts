@@ -1,14 +1,9 @@
 import { createReadStream } from "node:fs";
 
-import OpenAI from "openai";
+import type OpenAI from "openai";
 
 import type { PreparedAudioFile } from "../audio/ffmpeg.js";
-import {
-  mergeChunkTranscriptions,
-  type ChunkLocalSegment,
-  type ChunkTranscript,
-  type TranscriptSegment,
-} from "../domain/transcript.js";
+import { type ChunkLocalSegment, type ChunkTranscript, mergeChunkTranscriptions, type TranscriptSegment } from "../domain/transcript.js";
 
 interface DiarizedApiSegment {
   speaker?: string;
@@ -37,9 +32,7 @@ export async function transcribePreparedAudio(
   const chunkTranscripts = (
     await Promise.all(
       preparedAudio.chunks.map(async (chunk) => {
-        console.log(
-          `Starting transcription for chunk ${chunk.index + 1}/${preparedAudio.chunks.length} (${Math.round(chunk.durationSec)}s)...`,
-        );
+        console.log(`Starting transcription for chunk ${chunk.index + 1}/${preparedAudio.chunks.length} (${Math.round(chunk.durationSec)}s)...`);
 
         const response = (await client.audio.transcriptions.create({
           file: createReadStream(chunk.path),
@@ -76,11 +69,7 @@ function extractChunkSegments(response: DiarizedApiResponse): ChunkLocalSegment[
           text: (segment.text ?? "").trim(),
         }))
         .filter(
-          (segment) =>
-            segment.text.length > 0 &&
-            Number.isFinite(segment.startSec) &&
-            Number.isFinite(segment.endSec) &&
-            segment.endSec >= segment.startSec,
+          (segment) => segment.text.length > 0 && Number.isFinite(segment.startSec) && Number.isFinite(segment.endSec) && segment.endSec >= segment.startSec,
         )
     : [];
 

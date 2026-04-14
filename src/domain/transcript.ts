@@ -47,10 +47,7 @@ export function formatTimestamp(totalSeconds: number): string {
   return [hours, minutes, seconds].map((value) => String(value).padStart(2, "0")).join(":");
 }
 
-export function mergeChunkTranscriptions(
-  chunkTranscripts: ChunkTranscript[],
-  overlapSec: number,
-): TranscriptSegment[] {
+export function mergeChunkTranscriptions(chunkTranscripts: ChunkTranscript[], overlapSec: number): TranscriptSegment[] {
   const flattened = chunkTranscripts
     .flatMap((chunkTranscript) =>
       chunkTranscript.segments.map((segment) => ({
@@ -100,9 +97,7 @@ export function buildTranscriptArtifacts(
   const maxBlockChars = options.maxBlockChars ?? 1800;
   const maxSegmentsPerBlock = options.maxSegmentsPerBlock ?? 10;
   const speakers = Array.from(new Set(segments.map((segment) => segment.speaker)));
-  const fullText = segments
-    .map((segment) => `[${formatTimestamp(segment.startSec)}] ${segment.speaker}: ${segment.text}`)
-    .join("\n");
+  const fullText = segments.map((segment) => `[${formatTimestamp(segment.startSec)}] ${segment.speaker}: ${segment.text}`).join("\n");
   const blocks: TranscriptBlock[] = [];
 
   let currentLines: string[] = [];
@@ -132,8 +127,7 @@ export function buildTranscriptArtifacts(
   for (const segment of segments) {
     const line = `[${formatTimestamp(segment.startSec)} - ${formatTimestamp(segment.endSec)}] ${segment.speaker}: ${segment.text}`;
     const nextLength = currentLines.join("\n").length + (currentLines.length > 0 ? 1 : 0) + line.length;
-    const wouldOverflow =
-      currentLines.length >= maxSegmentsPerBlock || (currentLines.length > 0 && nextLength > maxBlockChars);
+    const wouldOverflow = currentLines.length >= maxSegmentsPerBlock || (currentLines.length > 0 && nextLength > maxBlockChars);
 
     if (wouldOverflow) {
       flushBlock();
@@ -158,11 +152,7 @@ export function buildTranscriptArtifacts(
   };
 }
 
-function shouldDeduplicate(
-  previous: Omit<TranscriptSegment, "id">,
-  current: Omit<TranscriptSegment, "id">,
-  overlapSec: number,
-): boolean {
+function shouldDeduplicate(previous: Omit<TranscriptSegment, "id">, current: Omit<TranscriptSegment, "id">, overlapSec: number): boolean {
   const previousText = normalizeText(previous.text);
   const currentText = normalizeText(current.text);
 
@@ -189,17 +179,10 @@ function shouldDeduplicate(
   return computeWordOverlap(previousText, currentText) >= DUPLICATE_TEXT_SIMILARITY_THRESHOLD;
 }
 
-function mergeDuplicatePair(
-  previous: Omit<TranscriptSegment, "id">,
-  current: Omit<TranscriptSegment, "id">,
-): Omit<TranscriptSegment, "id"> {
+function mergeDuplicatePair(previous: Omit<TranscriptSegment, "id">, current: Omit<TranscriptSegment, "id">): Omit<TranscriptSegment, "id"> {
   const normalizedTextsMatch = normalizeText(previous.text) === normalizeText(current.text);
   const preferredText = pickPreferredText(previous.text, current.text);
-  const preferredSpeaker = normalizedTextsMatch
-    ? previous.speaker
-    : preferredText === current.text
-      ? current.speaker
-      : previous.speaker;
+  const preferredSpeaker = normalizedTextsMatch ? previous.speaker : preferredText === current.text ? current.speaker : previous.speaker;
 
   return {
     speaker: preferredSpeaker,

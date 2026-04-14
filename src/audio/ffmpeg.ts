@@ -66,15 +66,7 @@ export async function assertBinaryExists(binaryName: string): Promise<void> {
 }
 
 export async function probeAudioFile(filePath: string): Promise<AudioFileStats> {
-  const { stdout } = await execFileAsync("ffprobe", [
-    "-v",
-    "error",
-    "-show_entries",
-    "format=duration,size,format_name",
-    "-of",
-    "json",
-    filePath,
-  ]);
+  const { stdout } = await execFileAsync("ffprobe", ["-v", "error", "-show_entries", "format=duration,size,format_name", "-of", "json", filePath]);
 
   const parsed = JSON.parse(stdout) as {
     format?: {
@@ -184,11 +176,7 @@ async function splitPreparedAudio(
   const bytesPerSecond = preparedStats.sizeBytes / preparedStats.durationSec;
   let targetChunkDurationSec = Math.max(
     overlapSec + 5,
-    Math.min(
-      TARGET_TRANSCRIBE_DURATION_SEC,
-      MAX_TRANSCRIBE_DURATION_SEC,
-      Math.floor((targetUploadBytes * SPLIT_MARGIN) / bytesPerSecond),
-    ),
+    Math.min(TARGET_TRANSCRIBE_DURATION_SEC, MAX_TRANSCRIBE_DURATION_SEC, Math.floor((targetUploadBytes * SPLIT_MARGIN) / bytesPerSecond)),
   );
 
   for (let attempt = 0; attempt < SPLIT_ATTEMPTS; attempt += 1) {
@@ -226,22 +214,13 @@ async function splitPreparedAudio(
       return chunks;
     }
 
-    targetChunkDurationSec = Math.max(
-      overlapSec + 5,
-      Math.floor(targetChunkDurationSec * SPLIT_RETRY_FACTOR),
-    );
+    targetChunkDurationSec = Math.max(overlapSec + 5, Math.floor(targetChunkDurationSec * SPLIT_RETRY_FACTOR));
   }
 
-  throw new Error(
-    `Unable to split "${preparedPath}" into chunks below ${targetUploadBytes} bytes after ${SPLIT_ATTEMPTS} attempts.`,
-  );
+  throw new Error(`Unable to split "${preparedPath}" into chunks below ${targetUploadBytes} bytes after ${SPLIT_ATTEMPTS} attempts.`);
 }
 
-function buildChunkPlan(
-  totalDurationSec: number,
-  targetChunkDurationSec: number,
-  overlapSec: number,
-): ChunkWindowPlan[] {
+function buildChunkPlan(totalDurationSec: number, targetChunkDurationSec: number, overlapSec: number): ChunkWindowPlan[] {
   if (targetChunkDurationSec <= overlapSec) {
     throw new Error("Chunk duration must be greater than the overlap duration.");
   }
@@ -274,12 +253,7 @@ function buildChunkPlan(
   return plan;
 }
 
-async function extractChunk(
-  preparedPath: string,
-  chunkPath: string,
-  startSec: number,
-  durationSec: number,
-): Promise<void> {
+async function extractChunk(preparedPath: string, chunkPath: string, startSec: number, durationSec: number): Promise<void> {
   await execFileAsync("ffmpeg", [
     "-y",
     "-ss",

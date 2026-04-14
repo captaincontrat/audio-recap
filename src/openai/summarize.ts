@@ -1,4 +1,4 @@
-import OpenAI from "openai";
+import type OpenAI from "openai";
 
 import { formatTimestamp, type TranscriptBlock } from "../domain/transcript.js";
 
@@ -40,13 +40,8 @@ export async function generateMeetingSummary(
 
   if (!summary) {
     const status = "status" in response ? String(response.status ?? "unknown") : "unknown";
-    const incompleteDetails =
-      "incomplete_details" in response && response.incomplete_details
-        ? JSON.stringify(response.incomplete_details)
-        : "none";
-    throw new Error(
-      `OpenAI returned an empty meeting summary (status: ${status}, incomplete_details: ${incompleteDetails}).`,
-    );
+    const incompleteDetails = "incomplete_details" in response && response.incomplete_details ? JSON.stringify(response.incomplete_details) : "none";
+    throw new Error(`OpenAI returned an empty meeting summary (status: ${status}, incomplete_details: ${incompleteDetails}).`);
   }
 
   return summary;
@@ -89,18 +84,10 @@ function buildDeveloperPrompt(outputLanguage?: string, hasMeetingNotes = true): 
   ].join("\n");
 }
 
-function buildUserPrompt(input: {
-  audioPath: string;
-  notesPath?: string;
-  meetingNotes: string;
-  transcriptBlocks: TranscriptBlock[];
-}): string {
+function buildUserPrompt(input: { audioPath: string; notesPath?: string; meetingNotes: string; transcriptBlocks: TranscriptBlock[] }): string {
   const normalizedMeetingNotes = input.meetingNotes.trim();
   const transcriptBlockPayload = input.transcriptBlocks
-    .map(
-      (block) =>
-        `<BLOCK id="${block.id}" start="${formatTimestamp(block.startSec)}" end="${formatTimestamp(block.endSec)}">\n${block.content}\n</BLOCK>`,
-    )
+    .map((block) => `<BLOCK id="${block.id}" start="${formatTimestamp(block.startSec)}" end="${formatTimestamp(block.endSec)}">\n${block.content}\n</BLOCK>`)
     .join("\n\n");
 
   return [
@@ -141,9 +128,7 @@ function extractSummaryText(response: {
   const contentText = response.output
     ?.flatMap((item) =>
       Array.isArray(item.content)
-        ? item.content
-            .map((contentItem) => (typeof contentItem.text === "string" ? contentItem.text.trim() : ""))
-            .filter(Boolean)
+        ? item.content.map((contentItem) => (typeof contentItem.text === "string" ? contentItem.text.trim() : "")).filter(Boolean)
         : [],
     )
     .join("\n")

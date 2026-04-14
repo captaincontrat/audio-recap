@@ -1,6 +1,6 @@
-import 'dotenv/config';
+import "dotenv/config";
 
-import { access, mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { parseArgs } from "node:util";
@@ -161,7 +161,8 @@ async function assertReadableFile(filePath: string): Promise<void> {
 }
 
 function printHelp(): void {
-  console.log(`
+  console.log(
+    `
 Usage:
   pnpm process:meeting --audio "/path/to/meeting.m4a" [--notes "/path/to/meeting-notes.md"] [--out-dir "./out"] [--language "fr"] [--keep-temp]
 
@@ -172,7 +173,8 @@ Options:
   --language    Optional language hint forwarded to transcription and summary generation.
   --keep-temp   Keep the intermediate ffmpeg artifacts instead of deleting them.
   -h, --help    Show this help message.
-`.trim());
+`.trim(),
+  );
 }
 
 main().catch((error) => {
