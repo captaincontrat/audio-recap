@@ -1,0 +1,43 @@
+services:
+  postgres:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-audio_recap}
+      POSTGRES_USER: ${POSTGRES_USER:-audio_recap}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-audio_recap}
+    command: ["postgres", "-p", "${POSTGRES_PORT:-6543}"]
+    ports:
+      - "${POSTGRES_PORT:-6543}:${POSTGRES_PORT:-6543}"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-audio_recap} -d ${POSTGRES_DB:-audio_recap} -p ${POSTGRES_PORT:-6543}",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  redis:
+    image: redis:8-alpine
+    restart: unless-stopped
+    command:
+      ["redis-server", "--appendonly", "yes", "--port", "${REDIS_PORT:-6381}"]
+    ports:
+      - "${REDIS_PORT:-6381}:${REDIS_PORT:-6381}"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-p", "${REDIS_PORT:-6381}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  postgres-data:
+  redis-data:
