@@ -1,0 +1,44 @@
+name: Audio Recap Coverage
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/audio-recap-coverage.yml"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "libs/audio-recap/**"
+  push:
+    paths:
+      - ".github/workflows/audio-recap-coverage.yml"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "libs/audio-recap/**"
+  workflow_dispatch:
+
+jobs:
+  coverage:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run library coverage
+        run: pnpm --filter ./libs/audio-recap test:coverage
