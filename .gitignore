@@ -4,3 +4,4 @@ node_modules
 !**/out/.keep
 *.m4a
 *.mp3
+coverage

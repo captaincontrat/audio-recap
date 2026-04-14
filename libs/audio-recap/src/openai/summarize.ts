@@ -47,7 +47,7 @@ export async function generateMeetingSummary(
   return summary;
 }
 
-function buildDeveloperPrompt(outputLanguage?: string, hasMeetingNotes = true): string {
+export function buildDeveloperPrompt(outputLanguage?: string, hasMeetingNotes = true): string {
   const languageInstruction = outputLanguage
     ? `Write the summary in ${outputLanguage}.`
     : hasMeetingNotes
@@ -84,7 +84,7 @@ function buildDeveloperPrompt(outputLanguage?: string, hasMeetingNotes = true): 
   ].join("\n");
 }
 
-function buildUserPrompt(input: { audioPath: string; notesPath?: string; meetingNotes: string; transcriptBlocks: TranscriptBlock[] }): string {
+export function buildUserPrompt(input: { audioPath: string; notesPath?: string; meetingNotes: string; transcriptBlocks: TranscriptBlock[] }): string {
   const normalizedMeetingNotes = input.meetingNotes.trim();
   const transcriptBlockPayload = input.transcriptBlocks
     .map((block) => `<BLOCK id="${block.id}" start="${formatTimestamp(block.startSec)}" end="${formatTimestamp(block.endSec)}">\n${block.content}\n</BLOCK>`)
@@ -109,7 +109,7 @@ function buildUserPrompt(input: { audioPath: string; notesPath?: string; meeting
   ].join("\n");
 }
 
-function extractSummaryText(response: {
+export function extractSummaryText(response: {
   output_text?: string | null;
   output?: Array<{
     type?: string;

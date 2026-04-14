@@ -59,7 +59,7 @@ export async function transcribePreparedAudio(
   };
 }
 
-function extractChunkSegments(response: DiarizedApiResponse): ChunkLocalSegment[] {
+export function extractChunkSegments(response: DiarizedApiResponse): ChunkLocalSegment[] {
   const segments = Array.isArray(response.segments)
     ? response.segments
         .map((segment) => ({

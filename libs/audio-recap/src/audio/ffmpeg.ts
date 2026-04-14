@@ -278,3 +278,8 @@ async function extractChunk(preparedPath: string, chunkPath: string, startSec: n
 function formatFfmpegSeconds(value: number): string {
   return value.toFixed(3);
 }
+
+export const __private__ = {
+  buildChunkPlan,
+  formatFfmpegSeconds,
+};

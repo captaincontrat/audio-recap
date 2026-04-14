@@ -1,7 +1,7 @@
 import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
 
 import { config as loadDotenv } from "dotenv";
@@ -16,10 +16,10 @@ import { renderSummaryMarkdown, renderTranscriptMarkdown } from "./render/markdo
 const PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const WORKSPACE_ROOT = path.resolve(PACKAGE_ROOT, "../..");
 
-async function main(): Promise<void> {
+export async function main(argv: string[] = process.argv.slice(2)): Promise<void> {
   const invocationCwd = resolveInvocationCwd();
   loadEnvironment(invocationCwd);
-  const options = parseCommandLine(process.argv.slice(2));
+  const options = parseCommandLine(argv);
   const resolvedAudioPath = path.resolve(invocationCwd, options.audio);
   const resolvedNotesPath = options.notes ? path.resolve(invocationCwd, options.notes) : undefined;
   const resolvedOutDir = path.resolve(invocationCwd, options.outDir);
@@ -101,7 +101,7 @@ async function main(): Promise<void> {
   }
 }
 
-function parseCommandLine(argv: string[]): {
+export function parseCommandLine(argv: string[]): {
   audio: string;
   notes?: string;
   outDir: string;
@@ -151,15 +151,15 @@ function parseCommandLine(argv: string[]): {
     notes: values.notes,
     outDir: values["out-dir"] ?? ".",
     language: values.language,
-    keepTemp: values["keep-temp"] ?? false,
+    keepTemp: values["keep-temp"] === true,
   };
 }
 
-function resolveInvocationCwd(): string {
+export function resolveInvocationCwd(): string {
   return process.env.INIT_CWD ? path.resolve(process.env.INIT_CWD) : process.cwd();
 }
 
-function loadEnvironment(invocationCwd: string): void {
+export function loadEnvironment(invocationCwd: string): void {
   const envPaths = new Set([path.join(invocationCwd, ".env"), path.join(WORKSPACE_ROOT, ".env")]);
 
   for (const envPath of envPaths) {
@@ -170,7 +170,7 @@ function loadEnvironment(invocationCwd: string): void {
   }
 }
 
-async function assertReadableFile(filePath: string): Promise<void> {
+export async function assertReadableFile(filePath: string): Promise<void> {
   try {
     await access(filePath);
   } catch (error) {
@@ -180,7 +180,7 @@ async function assertReadableFile(filePath: string): Promise<void> {
   }
 }
 
-function printHelp(): void {
+export function printHelp(): void {
   console.log(
     `
 Usage:
@@ -197,7 +197,25 @@ Options:
   );
 }
 
-main().catch((error) => {
+export function shouldRunCli(moduleUrl: string, argv1 = process.argv[1]): boolean {
+  if (!argv1) {
+    return false;
+  }
+
+  return moduleUrl === pathToFileURL(path.resolve(argv1)).href;
+}
+
+export function handleFatalError(error: unknown): void {
   console.error(error instanceof Error ? error.message : error);
   process.exitCode = 1;
-});
+}
+
+export function runCliIfInvoked(moduleUrl = import.meta.url, argv: string[] = process.argv.slice(2), argv1 = process.argv[1]): void {
+  if (!shouldRunCli(moduleUrl, argv1)) {
+    return;
+  }
+
+  void main(argv).catch(handleFatalError);
+}
+
+runCliIfInvoked();

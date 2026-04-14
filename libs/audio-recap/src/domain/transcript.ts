@@ -239,3 +239,11 @@ function computeWordOverlap(left: string, right: string): number {
 
   return sharedCount / Math.max(leftWords.size, rightWords.size);
 }
+
+export const __private__ = {
+  shouldDeduplicate,
+  mergeDuplicatePair,
+  pickPreferredText,
+  normalizeText,
+  computeWordOverlap,
+};
