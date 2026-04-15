@@ -69,6 +69,14 @@ The storage implementation is a narrow internal S3-compatible abstraction shared
 
 Heroku-friendly implementations should prefer direct browser-to-object-storage uploads via short-lived presigned URLs rather than proxying large media files through the app server. That still exercises the same S3-compatible path in production, local development, and CI.
 
+The bucket configuration must explicitly allow the direct browser upload path. At minimum, it must allow browser-origin CORS for the presigned upload method used by the platform, currently `PUT`, from:
+
+- local development app origins
+- CI browser-test app origins when end-to-end tests exercise uploads through a browser
+- production web-app origins
+
+Required request headers for the presigned upload flow must also be allowed, or local and CI upload tests will fail even when the backend signing logic is correct.
+
 **Why this over alternatives**
 
 - Over storing media or notes in Postgres: large binary and text payloads do not belong in the system of record for this product.
@@ -204,7 +212,7 @@ Keeping title generation as a separate stage preserves the existing recap markdo
 ## Risks / Trade-offs
 
 - [Creating transcript rows before success means failed items can persist] -> Keep failed records privacy-minimal, store only generic error summaries, and allow later management features to delete or retry them.
-- [S3-compatible storage and presigned uploads add endpoint and CORS configuration] -> Keep one env-var contract for AWS S3 and MinIO, auto-create local and CI buckets, and run end-to-end coverage against the same S3-compatible path.
+- [S3-compatible storage and presigned uploads add endpoint and CORS configuration] -> Keep one env-var contract for AWS S3 and MinIO, auto-create local and CI buckets, configure browser-direct `PUT` upload CORS for local/CI/prod origins, and run end-to-end coverage against the same S3-compatible path.
 - [Timestamp normalization can introduce edge-case rounding drift] -> Use duration-ratio scaling, clamp to original media bounds, and keep segment ordering stable after normalization.
 - [Dedicated title generation adds another LLM step] -> Use the same retry envelope as recap generation and keep the prompt narrowly scoped to title generation.
 - [Cleanup-before-terminal-state can delay success visibility] -> Keep cleanup fast, make it idempotent, and isolate it as a short finalization stage rather than mixing it into content generation steps.

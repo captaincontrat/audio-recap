@@ -5,7 +5,7 @@ The repository currently has two relevant pieces:
 - `libs/audio-recap`, which already contains the useful meeting-processing pipeline: ffmpeg preprocessing and chunking, diarized transcription, transcript artifact construction, and GPT-5.4 recap generation.
 - `app/`, which now has a Next.js + React + shadcn foundation with Biome, Vitest, and Playwright, but does not yet provide the durable data, auth, worker, and storage integrations the product needs.
 
-The product brief requires a web SaaS experience in `app/` with authenticated users, private ownership of future transcripts, and support for email/password plus Google sign-in. The repository already includes `docker-compose.yml` with Postgres and Redis services, which is a strong signal that the future web app should rely on durable relational state plus asynchronous background work instead of extending the current local CLI model.
+The product brief requires a web SaaS experience in `app/` with authenticated users, private ownership of future transcripts, and support for multiple auth paths rather than only one credential flow. The repository already includes `docker-compose.yml` with Postgres and Redis services, which is a strong signal that the future web app should rely on durable relational state plus asynchronous background work instead of extending the current local CLI model.
 
 This change is the platform bootstrap. It does not yet specify transcript upload, processing, sharing, or exports in full, but it must establish the architecture and account model those later capabilities will depend on.
 
@@ -16,7 +16,7 @@ This change is the platform bootstrap. It does not yet specify transcript upload
 - Define the web platform topology for a browser app, authenticated API/BFF, and background worker.
 - Assign clear roles to Postgres and Redis.
 - Establish that the web product reuses importable pipeline code from `libs/audio-recap` instead of shelling out to the CLI.
-- Define the account and session model for email/password and Google authentication.
+- Define the account and session model for password, magic-link, Google, passkey, and two-factor authentication flows.
 - Define the expected lifecycle flows for sign-up, email verification, password reset, sign in, sign out, and account deletion.
 - Keep the current CLI viable while the web product is built incrementally.
 
@@ -125,12 +125,13 @@ This keeps the data layer lightweight while still reducing boilerplate compared 
 
 ### Decision: Use BullMQ for Redis-backed background work
 
-BullMQ will provide the queue and worker primitives on top of Redis:
+BullMQ will provide the queue and worker primitives on top of Redis, with `ioredis` as the shared Redis client used by the Next.js web runtime and `app/worker`:
 
 - enqueueing background work from the Next.js runtime
 - durable retry metadata and backoff policy in the queue layer
 - separate worker-process consumption on Heroku
 - explicit job naming, concurrency, and failure handling for future transcript processing
+- shared Redis connection behavior and configuration across web and worker runtimes
 
 This matches the platform's Redis boundary without forcing a heavier workflow platform into the first version.
 
@@ -138,6 +139,21 @@ This matches the platform's Redis boundary without forcing a heavier workflow pl
 
 - Over custom Redis queue plumbing: BullMQ removes a large amount of boilerplate around retries, leases, and worker coordination.
 - Over a managed workflow platform in the bootstrap change: that would add a second major platform dependency before the core pipeline is proven.
+
+### Decision: Use Pino for structured logs across web and worker
+
+The Next.js web runtime and `app/worker` will use `pino` for structured application logs:
+
+- consistent machine-readable logs in Heroku
+- shared log shape across auth, uploads, queue orchestration, and worker processing
+- request/job context fields that make it easier to trace one user action across the web and worker boundaries
+
+This keeps observability lightweight while still giving the platform a usable debugging story once auth, uploads, and background jobs interact.
+
+**Why this over alternatives**
+
+- Over ad-hoc `console` logging: unstructured logs become much harder to filter and correlate once multiple runtimes are involved.
+- Over a heavier observability stack in the bootstrap change: `pino` gives enough structure without introducing unnecessary platform complexity.
 
 ### Decision: Use S3-compatible transient blob storage across environments
 
@@ -183,15 +199,22 @@ The web platform must not invoke `pnpm process:meeting` or spawn the CLI as a su
 
 Better Auth will provide the core authentication plumbing for:
 
-- email/password sign-up and sign-in
-- Google sign-in
+- email/password credential flows
+- magic-link sign-in
+- Google sign-in and Google One Tap
+- passkey enrollment and sign-in
+- optional two-factor orchestration
 - session issuance and session validation
+- last-login-method tracking and integration with the app-wide localization model
 - the basic route and callback machinery required for auth flows
 
 The application still owns the product-specific rules required by this change:
 
 - one active account per normalized email
 - automatic linking by verified Google email
+- verified-account creation and linking rules for magic-link flows
+- passkey enrollment rules and lifecycle UX
+- two-factor enrollment, recovery, and trusted-device UX
 - verification-pending versus fully verified access states
 - recent-auth checks for permanent account deletion
 - durable cleanup semantics tied to owned product data
@@ -203,6 +226,66 @@ This keeps commodity auth plumbing out of the critical path without outsourcing 
 - Over fully custom auth plumbing: that would add unnecessary boilerplate for solved protocol and session mechanics.
 - Over Passport: Passport would still require too much manual assembly for the required password, session, and provider flows.
 - Over Auth.js: Auth.js remains a viable fallback, but Better Auth better fits the required password-account lifecycle with less custom glue.
+
+### Decision: Select the Better Auth plugin set now rather than adding auth UX piecemeal later
+
+The bootstrap change will explicitly include these Better Auth plugins and their initial scope:
+
+- `magic-link`: passwordless email sign-in that also serves as proof of email ownership
+- `passkey`: authenticated users can enroll passkeys and returning users can sign in with enrolled passkeys
+- `one-tap`: Google One Tap as a UX enhancement over the standard Google OAuth button
+- `twoFactor`: opt-in 2FA with TOTP, email OTP, backup codes, and trusted devices
+- `last-login-method`: client-side memory of the last successful login method to improve sign-in UX
+- `i18n`: shared locale detection and translation plumbing for the full app in English, French, German, and Spanish, including Better Auth error messages with English fallback
+
+Implementation references for the selected plugins:
+
+- [Better Auth 2FA](https://better-auth.com/docs/plugins/2fa)
+- [Better Auth Passkey](https://better-auth.com/docs/plugins/passkey)
+- [Better Auth One Tap](https://better-auth.com/docs/plugins/one-tap)
+- [Better Auth Magic Link](https://better-auth.com/docs/plugins/magic-link)
+- [Better Auth Last Login Method](https://better-auth.com/docs/plugins/last-login-method)
+- [Better Auth i18n](https://better-auth.com/docs/plugins/i18n)
+
+Scope constraints for the bootstrap:
+
+- passkey-first onboarding remains out of scope; users enroll passkeys after they already have an account session
+- `last-login-method` stays cookie-backed only and will not add a database field in this change
+- full-app i18n is in scope at the platform level, but untranslated copy for future product surfaces that do not exist yet will ship with those surfaces rather than being invented in this bootstrap change
+
+**Why this over alternatives**
+
+- Over adding these flows later one by one: auth UX and auth schema are tightly connected, so deciding the plugin set now reduces migration churn.
+- Over building parallel custom implementations for each flow: the Better Auth plugins cover the protocol-heavy pieces with less boilerplate.
+
+### Decision: Use AWS SES for outbound auth email delivery
+
+Production auth emails will be delivered through AWS SES:
+
+- email verification
+- password reset
+- magic-link sign-in
+- email-based 2FA OTP
+
+The delivery path should live behind a small application adapter so local development and CI can swap in a test sink later without changing higher-level auth flows.
+
+**Why this over alternatives**
+
+- Over introducing a new email provider: SES already exists in the operator's stack and reduces account and deliverability setup work.
+- Over coupling auth logic directly to one mail transport API: a small adapter preserves testability and keeps provider changes contained.
+
+### Decision: Keep Argon2id for password accounts by overriding Better Auth's default scrypt
+
+Better Auth uses `scrypt` for credential passwords by default, but this change will keep the explicit requirement that password-bearing accounts store Argon2id hashes.
+
+That means the Better Auth email/password configuration must provide custom password hash and verify functions, likely using `@node-rs/argon2`, so the credential flows remain compatible with the existing security requirement in the auth spec.
+
+Argon2id applies only to accounts that actually have passwords. It is not used for Google-only, passkey-only, or magic-link-only login paths.
+
+**Why this over alternatives**
+
+- Over quietly switching the spec to Better Auth's default scrypt: the current spec already calls for Argon2id and this keeps the requirement explicit.
+- Over storing or comparing passwords directly: Argon2id is the password-hashing layer that protects credential accounts if the database is leaked.
 
 ### Decision: Use server-managed sessions with secure cookies
 
@@ -232,15 +315,20 @@ The durable identity model is:
 - one normalized primary email per user
 - zero or one password credential
 - zero or one Google identity link
+- zero or more enrolled passkeys
+- zero or one two-factor enrollment state with recovery codes
 - many revocable sessions
 
 Rules:
 
 - email addresses are globally unique across active accounts
 - email/password sign-up creates an unverified account
+- magic-link sign-in with a new email creates a verified account
+- magic-link sign-in with an existing account signs into that account and satisfies email ownership verification
 - Google sign-in creates a verified account when the email is new
 - Google sign-in links to an existing account when the email already exists
 - a verified Google email satisfies email ownership verification for the linked account
+- enrolled passkeys attach to an existing account and do not create duplicate accounts during this bootstrap change
 
 This prevents duplicate libraries and avoids fragmenting a user's future transcript history across separate auth providers.
 
@@ -249,9 +337,9 @@ This prevents duplicate libraries and avoids fragmenting a user's future transcr
 - Over separate accounts per provider: that would create duplicate transcript ownership and confusing account recovery.
 - Over manual provider linking later: matching by verified email is simpler and safer for a single-user SaaS.
 
-### Decision: Verification and reset tokens are single-use, time-limited, and stored hashed
+### Decision: Verification, reset, and magic-link tokens are single-use, time-limited, and stored hashed
 
-Email-verification tokens and password-reset tokens will be:
+Email-verification tokens, password-reset tokens, and magic-link tokens will be:
 
 - generated server-side
 - stored only as hashes in Postgres
@@ -259,7 +347,7 @@ Email-verification tokens and password-reset tokens will be:
 - time-limited
 - invalidated on consumption
 
-Password-reset completion revokes other active sessions. Verification and reset flows must not leak whether an email address exists except where the user is already authenticated.
+Password-reset completion revokes other active sessions. Verification, reset, and magic-link request flows must not leak whether an email address exists except where the user is already authenticated.
 
 **Why this over alternatives**
 
@@ -273,6 +361,7 @@ Account deletion will be a permanent action that:
 - requires recent authentication
 - revokes all sessions
 - removes password and provider credentials
+- removes enrolled passkeys and two-factor recovery material
 - enqueues deletion of owned future application data
 - leaves no recoverable "trash" state for uploaded source media
 
@@ -297,6 +386,21 @@ This keeps the web toolchain compact and aligned with the stack already present 
 - Over separate ESLint and Prettier tooling: that would increase configuration surface with little product value.
 - Over relying only on browser end-to-end tests: that would slow feedback loops and make failures harder to localize.
 
+### Decision: Use React Hook Form plus Zod for browser forms and shared validation
+
+The web app will use `react-hook-form` for non-trivial browser forms and `zod` schemas, wired through `@hookform/resolvers` where appropriate, for shared validation logic:
+
+- `react-hook-form` manages auth and future upload form state with less component boilerplate
+- `zod` schemas define parsed input shapes that can be reused across client and server boundaries
+- `@hookform/resolvers` keeps browser validation aligned with the same schema language used by server-side parsing
+
+Server-side validation remains authoritative, but this stack reduces repetitive form code and improves user feedback on auth and upload surfaces.
+
+**Why this over alternatives**
+
+- Over hand-rolled form state with `useState`: the auth surface already has enough forms to justify a form library immediately.
+- Over duplicating validation rules in unrelated formats: `zod` helps keep browser and server validation closer together.
+
 ### Decision: Future source media remains transient infrastructure, not durable product content
 
 Even though upload and processing behavior will be specified in a later change, this platform design reserves a clear boundary now:
@@ -319,12 +423,13 @@ The worker may use temporary filesystem scratch space during processing, but the
 - [Automatic Google linking can create account-takeover risk if email trust is weak] -> Only link when Google returns a verified email and the platform enforces one active account per email.
 - [Hard-delete semantics can race with queued work] -> Make deletion jobs idempotent and require workers to re-check account existence before writing durable data.
 - [S3-compatible storage needs local endpoint and CORS discipline] -> Standardize one env-var contract for AWS S3 and MinIO, bootstrap local buckets automatically, and keep browser uploads on the same code path in local development and CI.
+- [The expanded auth plugin set increases bootstrap scope] -> Keep passkey-first onboarding and richer account-profile features out of scope while establishing the selected auth surfaces and full-app i18n foundation now.
 
 ## Migration Plan
 
 1. Preserve the existing CLI workflow and keep `pnpm process:meeting` functional throughout the transition.
 2. Extend the existing Next.js app with authenticated server surfaces and add the separate worker runtime under `app/` without yet replacing the CLI.
-3. Add the Drizzle schema and migrations for users, credentials, sessions, and token tables.
+3. Add the Drizzle schema and migrations for users, credentials, passkeys, two-factor state, sessions, and token tables.
 4. Refactor `libs/audio-recap` so the CLI and future worker both call shared pipeline functions.
 5. Implement the authentication flows defined in the `account-authentication` spec using Better Auth plus app-owned account rules.
 6. Layer later changes on top of this platform for meeting import/processing, transcript management, sharing, and export.

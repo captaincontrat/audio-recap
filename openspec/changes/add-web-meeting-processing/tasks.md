@@ -1,7 +1,7 @@
 ## 1. Submission And Persistence Foundations
 
 - [ ] 1.1 Add the Postgres schema and migrations for transcript records, processing-job records, processing statuses, generic failure fields, and privacy-safe transcript metadata.
-- [ ] 1.2 Implement the transient S3-compatible input storage abstraction for uploaded media and optional notes, including MinIO-backed local/CI usage and create/read/delete operations usable by both the Next.js web runtime and worker.
+- [ ] 1.2 Implement the transient S3-compatible input storage abstraction for uploaded media and optional notes, including MinIO-backed local/CI usage, bucket bootstrap, browser-direct `PUT` upload CORS configuration for local/CI/prod origins, and create/read/delete operations usable by both the Next.js web runtime and worker.
 - [ ] 1.3 Implement the authenticated submission initiation flow in the Next.js web runtime that validates one audio/video file plus optional notes, issues short-lived presigned upload details, creates the transcript and processing-job records, and enqueues the job once upload handoff succeeds.
 
 ## 2. Shared Processing Pipeline
