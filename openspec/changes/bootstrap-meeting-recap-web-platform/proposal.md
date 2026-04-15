@@ -1,27 +1,29 @@
 ## Why
 
-The repository currently provides only a local CLI pipeline, while the product brief calls for a web SaaS experience in `app/` with authenticated users, persistent transcript ownership, and asynchronous processing. The platform and authentication decisions need to be made first because every later web capability depends on user identity, durable ownership, background jobs, and a shared runtime model.
+The original bootstrap change bundled platform runtime, core auth, advanced auth methods, localization, account-deletion semantics, and processing-coupled storage and pipeline concerns into one large scope. That made the foundation change too broad for high-quality implementation work.
+
+This reduced bootstrap keeps only the smallest shared foundation that every later web capability still depends on: a web runtime plus worker boundary, durable auth persistence, core email/password account flows, and protected-route enforcement for a verified user.
 
 ## What Changes
 
-- Establish the baseline web platform topology for the future product: a Next.js web app in `app/`, Better Auth-backed authentication, a BullMQ worker, Postgres for durable application data, Redis for asynchronous job coordination, and S3-compatible transient blob storage.
-- Define the platform rule that the web app reuses shared meeting-processing modules from `libs/audio-recap` instead of shelling out to the CLI, so the CLI and web worker can share one pipeline core.
-- Add account authentication for individual users with email/password, magic-link sign-in, passkey sign-in, Google sign-in plus Google One Tap, optional two-factor authentication, session-based authentication, sign out, email verification, password reset, full-app localization support, last-login-method UX hints, and account deletion.
-- Define the system boundaries needed by future changes, including transcript ownership, worker-triggered processing, and privacy-oriented handling of transient source media.
-- Make explicit that this change does not introduce billing, teams, admin backoffice tooling, API tokens, or permanent archival of uploaded source media.
+- Establish the baseline web platform topology for the future product: a Next.js web app in `app/`, a dedicated worker process, Better Auth, Postgres for durable application data, Redis for asynchronous job coordination, and shared structured logging.
+- Add core account authentication for individual users with email/password sign-up, email verification, password reset, sign-in, sign-out, session-based authentication, and one-account-per-email rules.
+- Standardize the core auth implementation stack on Drizzle, AWS SES-backed verification/reset email delivery, React Hook Form, Zod, Vitest, and Playwright.
+- Keep the current CLI viable while later changes add concrete transcript processing, advanced auth methods, localization, and account lifecycle hardening.
+- Make explicit that this reduced bootstrap does not introduce Google sign-in, Google One Tap, magic links, passkeys, two-factor authentication, auth localization, account deletion, concrete transient blob-storage behavior, or shared pipeline refactoring.
 
 ## Capabilities
 
 ### New Capabilities
-- `account-authentication`: Account creation, email/password and magic-link authentication, Google sign-in plus One Tap, passkeys, optional two-factor authentication, session lifecycle, app-localized UX, account recovery, account deletion, and the security rules needed for a single-user SaaS transcript library.
+- `core-account-authentication`: Password-account creation, verification, password reset, sign-in/sign-out, session lifecycle, protected-route enforcement, and the core persistence/security rules needed for a verified single-user SaaS account.
 
 ### Modified Capabilities
 - None.
 
 ## Impact
 
-- `app/` becomes the Next.js web product entrypoint and must evolve from a frontend foundation into the authenticated product runtime plus worker boundary.
-- New backend runtime surfaces are required inside the Next.js app plus a background worker connected through BullMQ/Redis-backed jobs.
-- Postgres becomes the system of record for users, sessions, identity links, and future transcript ownership metadata.
-- `libs/audio-recap` must be reusable as shared pipeline code instead of being treated only as a CLI wrapper.
-- AWS SES email delivery, Google OAuth/One Tap integration, passkey/WebAuthn support, and S3-compatible blob storage become required external dependencies for account lifecycle flows and future upload handling.
+- `app/` becomes the authenticated web product entrypoint and establishes the long-lived web/worker runtime boundary that later changes will reuse.
+- Postgres becomes the durable store for users, normalized emails, password credentials, sessions, and verification/reset tokens.
+- Redis-backed queue infrastructure becomes part of the platform baseline even before transcript-processing logic is layered on top.
+- AWS SES becomes a required dependency for verification and password-reset email flows.
+- Follow-up changes can build on a verified authenticated user without having to carry the full advanced-auth or processing-storage scope in the same implementation context.

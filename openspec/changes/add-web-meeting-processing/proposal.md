@@ -1,11 +1,12 @@
 ## Why
 
-The platform and authentication foundation is now defined, but the web product still lacks the core value path: accepting meeting media, turning it into a durable transcript record, and deleting sensitive transient inputs once processing is complete. This change is needed now because every later transcript library, sharing, and export feature depends on a well-defined processing lifecycle and a privacy-safe retention model.
+The reduced platform bootstrap now defines the verified-user foundation, runtime topology, and queue/database baseline, but it intentionally leaves out the concrete upload/storage and shared-pipeline refactor work that would have made that bootstrap too large. The web product still lacks the core value path: accepting meeting media, turning it into a durable transcript record, and deleting sensitive transient inputs once processing is complete. This change is needed now because every later transcript library, sharing, and export feature depends on a well-defined processing lifecycle, a privacy-safe retention model, and the concrete processing/storage rules that were split out of the bootstrap.
 
 ## What Changes
 
 - Add authenticated meeting submission for audio or video files, with optional notes captured at submission time.
 - Make the submission flow use direct browser-to-S3-compatible uploads with short-lived presigned URLs so Heroku-hosted web processes do not proxy large media files.
+- Own the concrete S3-compatible transient-input storage contract and the shared `libs/audio-recap` pipeline refactor that were intentionally split out of the reduced bootstrap change.
 - Add a database-backed media-normalization policy that can be flipped between `optional` and `required`, using Mediabunny to try converting selected audio files to MP3 and selected video files to extracted-audio MP3 before upload.
 - Define the asynchronous processing job lifecycle from upload through transcript generation, recap generation, AI-generated transcript title creation, terminal success, and terminal failure.
 - Specify that the worker reuses shared media/transcription/summarization code from `libs/audio-recap` instead of invoking the CLI as a subprocess.

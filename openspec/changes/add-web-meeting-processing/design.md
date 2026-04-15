@@ -1,6 +1,6 @@
 ## Context
 
-The previous change, `bootstrap-meeting-recap-web-platform`, established the runtime topology for a browser app, authenticated API/BFF, and background worker under `app/`, with Postgres as the durable source of truth, Redis for asynchronous coordination, and `libs/audio-recap` as the shared pipeline core rather than a CLI-only tool.
+The previous change, `bootstrap-meeting-recap-web-platform`, now establishes the runtime topology for a browser app, authenticated API/BFF, and background worker under `app/`, with Postgres as the durable source of truth, Redis for asynchronous coordination, and a verified-user auth foundation.
 
 This change adds the first end-to-end product workflow on top of that foundation: a verified authenticated user submits one audio or video file and optional notes, the worker processes the submission asynchronously, and the system persists a transcript record as the durable product resource.
 
@@ -18,6 +18,8 @@ But it is not yet web-safe in three important ways:
 - it renders timestamps in accelerated-audio time rather than original media time
 
 This change must solve those gaps while preserving the privacy constraints from the brief: source media and transient notes are not durable product content.
+
+It is also the change that now owns the concrete S3-compatible transient-input storage contract and the `libs/audio-recap` shared-pipeline refactor that were intentionally split out of the reduced bootstrap.
 
 ## Goals / Non-Goals
 
