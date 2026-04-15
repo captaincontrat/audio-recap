@@ -26,16 +26,16 @@ The system SHALL store a Postgres-backed `mediaNormalizationPolicy` setting with
 - **WHEN** the current database-backed `mediaNormalizationPolicy` is `required`
 - **THEN** the submission flow requires successful browser-side normalization before queueing and does not allow fallback to the original file
 
-### Requirement: The submission flow applies the current normalization policy before upload handoff
-The submission flow SHALL use browser-side normalization before upload handoff. For audio file selections, the browser SHALL try to convert the selected audio into MP3. For video file selections, the browser SHALL try to extract the primary audio track and convert that extracted audio into MP3. If the current normalization policy is `optional`, the system SHALL still allow upload of the original validated file when local normalization is unavailable, unsupported for the selected file, or fails. If the current normalization policy is `required`, the system SHALL reject the submission before queueing when local normalization is unavailable, unsupported for the selected file, or fails. Raw video upload MUST remain supported as a fallback path only while the current policy is `optional`.
+### Requirement: The submission flow applies the current normalization policy before upload
+The submission flow SHALL use Mediabunny for browser-side normalization before upload. For audio file selections, the browser SHALL try to convert the selected audio into MP3. For video file selections, the browser SHALL try to extract the primary audio track and convert that extracted audio into MP3. If the current normalization policy is `optional`, the system SHALL still allow upload of the original validated file when local normalization is unavailable, unsupported for the selected file, or fails. If the current normalization policy is `required`, the system SHALL reject the submission before queueing when local normalization is unavailable, unsupported for the selected file, or fails. Raw video upload MUST remain supported as a fallback path only while the current policy is `optional`.
 
 #### Scenario: Audio normalization succeeds before upload
 - **WHEN** a verified authenticated user selects a supported audio file and browser-side MP3 conversion succeeds
-- **THEN** the browser hands off an MP3 processing input and the system still creates the transcript record and queued processing job
+- **THEN** the browser uploads an MP3 processing input and the system still creates the transcript record and queued processing job
 
 #### Scenario: Video audio extraction succeeds before upload
 - **WHEN** a verified authenticated user selects a supported video file and browser-side audio extraction plus MP3 conversion succeeds
-- **THEN** the browser hands off the extracted-audio MP3 and the system still creates the transcript record and queued processing job
+- **THEN** the browser uploads the extracted-audio MP3 and the system still creates the transcript record and queued processing job
 
 #### Scenario: Optional mode falls back to the original file
 - **WHEN** browser-side normalization is unavailable, unsupported for the selected media, or fails while the current policy is `optional`
@@ -60,8 +60,15 @@ The system SHALL process accepted submissions asynchronously rather than inside 
 - **WHEN** the worker exhausts processing for a submission without a successful completion
 - **THEN** the transcript record moves to `failed` status with a generic failure summary suitable for user display
 
+### Requirement: The worker uses shared meeting-processing library code
+The web processing system SHALL execute preprocessing, chunking, diarized transcription, overlap-aware transcript merge, transcript artifact construction, recap generation, and title generation through importable shared library code derived from `libs/audio-recap`. The normal processing path MUST NOT depend on spawning the CLI process as a subprocess.
+
+#### Scenario: Worker begins a processing job
+- **WHEN** the worker starts handling an accepted submission
+- **THEN** it runs the meeting-processing stages through shared library code rather than by invoking the CLI entrypoint as an external process
+
 ### Requirement: Successful processing produces transcript markdown, recap markdown, and an AI-generated title
-For a successful submission, the system SHALL persist a transcript, a meeting recap, and an AI-generated title for the transcript record. The recap generation SHALL use submitted notes when notes were provided and SHALL fall back to transcript-only generation when notes were not provided. The completed transcript record MUST include non-empty canonical markdown fields for both transcript and recap and a non-empty title.
+For a successful submission, the system SHALL generate a transcript, a meeting recap, and an AI-generated title for the transcript record. The recap generation SHALL use submitted notes when notes were provided and SHALL fall back to transcript-only generation when notes were not provided. The completed transcript record MUST include non-empty canonical markdown fields for both transcript and recap and a non-empty title.
 
 #### Scenario: Successful processing with notes
 - **WHEN** a submission with notes reaches successful completion
@@ -70,6 +77,13 @@ For a successful submission, the system SHALL persist a transcript, a meeting re
 #### Scenario: Successful processing without notes
 - **WHEN** a submission without notes reaches successful completion
 - **THEN** the completed transcript record contains transcript markdown, recap markdown derived from the transcript alone, and an AI-generated title
+
+### Requirement: Transcript timestamps are normalized to original media time
+The system SHALL normalize generated transcript timestamps back to the original submitted media timeline before building canonical transcript markdown. The stored transcript MUST NOT expose the accelerated preprocessing timeline used internally by the worker.
+
+#### Scenario: Completed transcript is viewed after x2 preprocessing
+- **WHEN** a user reads a completed transcript that was processed through accelerated preprocessing
+- **THEN** the timestamps shown in the transcript correspond to the original submitted media time rather than the prepared-audio time
 
 ### Requirement: Retryable failures are retried automatically and non-retryable failures fail fast
 The system SHALL automatically retry retryable infrastructure or provider failures up to a bounded maximum of three total attempts for the same transcript record. Non-retryable validation failures MUST NOT be retried. During automatic retry, the transcript status SHALL enter `retrying`, and after the retry budget is exhausted the transcript SHALL move to `failed`.

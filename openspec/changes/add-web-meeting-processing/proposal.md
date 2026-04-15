@@ -1,24 +1,22 @@
 ## Why
 
-The reduced platform bootstrap now defines the verified-user foundation, runtime topology, and queue/database baseline, but it intentionally leaves out the concrete upload/storage and shared-pipeline refactor work that would have made that bootstrap too large. The web product still lacks the core value path: accepting meeting media, turning it into a durable transcript record, and deleting sensitive transient inputs once processing is complete. This change is needed now because every later transcript library, sharing, and export feature depends on a well-defined processing lifecycle, a privacy-safe retention model, and the concrete processing/storage rules that were split out of the bootstrap.
+The reduced platform bootstrap now defines the verified-user foundation, runtime topology, and queue/database baseline, and `add-meeting-processing-foundation` now defines the shared transient-storage and library-first processing contracts that make web-safe meeting processing possible.
+
+What the product still needs is the first end-to-end user workflow on top of those foundations: accepting one meeting media submission, turning it into a durable transcript resource with a stable processing lifecycle, and deleting sensitive transient inputs once processing reaches a terminal state. This reduced change exists to define that transcript/job lifecycle contract without also carrying the lower-level storage and pipeline-refactor scope.
 
 ## What Changes
 
-- Add authenticated meeting submission for audio or video files, with optional notes captured at submission time.
-- Make the submission flow use direct browser-to-S3-compatible uploads with short-lived presigned URLs so Heroku-hosted web processes do not proxy large media files.
-- Own the concrete S3-compatible transient-input storage contract and the shared `libs/audio-recap` pipeline refactor that were intentionally split out of the reduced bootstrap change.
-- Add a database-backed media-normalization policy that can be flipped between `optional` and `required`, using Mediabunny to try converting selected audio files to MP3 and selected video files to extracted-audio MP3 before upload.
-- Define the asynchronous processing job lifecycle from upload through transcript generation, recap generation, AI-generated transcript title creation, terminal success, and terminal failure.
-- Specify that the worker reuses shared media/transcription/summarization code from `libs/audio-recap` instead of invoking the CLI as a subprocess.
-- Make the transcript record the durable product resource, with canonical markdown fields for the transcript and recap plus privacy-safe metadata needed for retrieval and future management.
-- Require normalization of transcript timestamps back to original media time instead of keeping the current CLI's accelerated-audio timeline.
-- Define failure handling, retry rules, and user-visible job status behavior.
-- Add strict deletion requirements for uploaded source media and transient notes once processing reaches a terminal state.
+- Add authenticated meeting submission for one audio or video file with optional notes captured at submission time.
+- Create the durable transcript resource immediately on accepted submission, along with a separate processing-job record that tracks execution state and retry history.
+- Make submission intake read the database-backed `mediaNormalizationPolicy`, apply the current browser-side normalization rules, and snapshot the policy onto each accepted job.
+- Define the asynchronous processing lifecycle from `queued` through terminal success or failure, including user-visible status stages and bounded retry behavior.
+- Persist completed transcript records with canonical `transcriptMarkdown`, `recapMarkdown`, an AI-generated title, and privacy-safe metadata needed for later management features.
+- Require deletion of transient source media and transient notes before a transcript is published as `completed` or `failed`.
 
 ## Capabilities
 
 ### New Capabilities
-- `meeting-import-processing`: Authenticated media submission, optional notes capture, async processing, shared-pipeline execution, transcript generation, recap generation, AI title generation, timestamp normalization, and job status behavior.
+- `meeting-import-processing`: Authenticated media submission, optional notes capture, async processing lifecycle, transcript/job status behavior, and durable transcript completion.
 - `transcript-data-retention`: Durable transcript record shape, privacy-safe persisted metadata, and strict deletion of source media and transient notes after terminal processing states.
 
 ### Modified Capabilities
@@ -26,10 +24,7 @@ The reduced platform bootstrap now defines the verified-user foundation, runtime
 
 ## Impact
 
-- `app/` gains the first end-to-end product workflow beyond authentication: submission UI, job-status surfaces, and protected server routes for creation and progress checks.
-- The submission UI must read the current database-backed normalization policy and either allow raw-source fallback or require successful browser-side MP3 normalization before queueing.
-- The Next.js web runtime and `app/worker` must coordinate presigned upload initiation, queue-backed job execution, retries, terminal cleanup, and transcript persistence.
-- Postgres must store transcript records, processing-job state, and the database-backed normalization policy needed for durable ownership, intake behavior, and status history.
-- Redis-backed job execution becomes part of the main user flow rather than only a platform placeholder.
-- `libs/audio-recap` must expose reusable pipeline functions that support web-worker execution, original-time normalization, and privacy-safe markdown generation.
-- S3-compatible storage becomes part of the user-facing submission path, using AWS S3 in production and MinIO in local development and CI.
+- `app/` gains the first end-to-end authenticated meeting-submission workflow, including transcript creation and status surfaces.
+- Postgres becomes the durable home for transcript records, processing-job state, normalization-policy snapshots, and privacy-safe transcript metadata.
+- `app/worker` coordinates transcript persistence, retries, failure handling, and cleanup on top of the shared storage and processing contracts from `add-meeting-processing-foundation`.
+- Later transcript management, sharing, and export changes build on the reduced transcript resource contract defined here rather than on storage or pipeline-internals artifacts.
