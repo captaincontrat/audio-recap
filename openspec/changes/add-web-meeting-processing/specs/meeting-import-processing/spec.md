@@ -15,6 +15,36 @@ The system SHALL allow a verified authenticated user to submit exactly one audio
 - **WHEN** a user submits an unreadable, unsupported, or oversized media file
 - **THEN** the system rejects the request without creating queued background work
 
+### Requirement: Media normalization policy is database-backed and governs submission intake
+The system SHALL store a Postgres-backed `mediaNormalizationPolicy` setting with allowed values `optional` and `required`. The submission flow SHALL read the current policy from the database before upload intake and SHALL snapshot that policy onto each accepted submission so later policy changes affect only new submissions.
+
+#### Scenario: Optional normalization policy is active
+- **WHEN** the current database-backed `mediaNormalizationPolicy` is `optional`
+- **THEN** the submission flow allows browser-side normalization to fall back to the original validated file
+
+#### Scenario: Required normalization policy is active
+- **WHEN** the current database-backed `mediaNormalizationPolicy` is `required`
+- **THEN** the submission flow requires successful browser-side normalization before queueing and does not allow fallback to the original file
+
+### Requirement: The submission flow applies the current normalization policy before upload
+The submission flow SHALL use Mediabunny for browser-side normalization before upload. For audio file selections, the browser SHALL try to convert the selected audio into MP3. For video file selections, the browser SHALL try to extract the primary audio track and convert that extracted audio into MP3. If the current normalization policy is `optional`, the system SHALL still allow upload of the original validated file when local normalization is unavailable, unsupported for the selected file, or fails. If the current normalization policy is `required`, the system SHALL reject the submission before queueing when local normalization is unavailable, unsupported for the selected file, or fails. Raw video upload MUST remain supported as a fallback path only while the current policy is `optional`.
+
+#### Scenario: Audio normalization succeeds before upload
+- **WHEN** a verified authenticated user selects a supported audio file and browser-side MP3 conversion succeeds
+- **THEN** the browser uploads an MP3 processing input and the system still creates the transcript record and queued processing job
+
+#### Scenario: Video audio extraction succeeds before upload
+- **WHEN** a verified authenticated user selects a supported video file and browser-side audio extraction plus MP3 conversion succeeds
+- **THEN** the browser uploads the extracted-audio MP3 and the system still creates the transcript record and queued processing job
+
+#### Scenario: Optional mode falls back to the original file
+- **WHEN** browser-side normalization is unavailable, unsupported for the selected media, or fails while the current policy is `optional`
+- **THEN** the system uploads the original validated audio or video file and continues the submission flow
+
+#### Scenario: Required mode rejects failed normalization
+- **WHEN** browser-side normalization is unavailable, unsupported for the selected media, or fails while the current policy is `required`
+- **THEN** the system rejects the submission before queueing and does not upload the original file as a fallback
+
 ### Requirement: Meeting processing runs asynchronously with visible status stages
 The system SHALL process accepted submissions asynchronously rather than inside the upload request. Each transcript record SHALL expose a user-visible processing status that reflects the current lifecycle stage. The status model MUST support `queued`, `preprocessing`, `transcribing`, `generating_recap`, `generating_title`, `finalizing`, `retrying`, `completed`, and `failed`.
 

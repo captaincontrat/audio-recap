@@ -24,6 +24,7 @@ This change must solve those gaps while preserving the privacy constraints from 
 **Goals:**
 
 - Define the authenticated upload and asynchronous processing workflow for one audio or video submission.
+- Define a database-backed browser-side media-normalization policy that can make Mediabunny normalization optional or required before upload.
 - Define the durable transcript record and the minimum privacy-safe metadata it keeps.
 - Specify user-visible processing states, retry behavior, and terminal failure behavior.
 - Require reuse of the existing media/transcription/summarization pipeline through shared library code in `libs/audio-recap`.
@@ -49,7 +50,7 @@ Each authenticated submission creates two durable records in Postgres:
 
 The transcript record exists from submission time onward so the user has a stable object to poll, revisit, and later manage. Its initial state is pending, with canonical markdown fields unset until the worker succeeds.
 
-The processing job is an execution record owned by the transcript. It stores stage progress, retry counters, generic failure codes, and references to transient inputs needed by the worker.
+The processing job is an execution record owned by the transcript. It stores stage progress, retry counters, generic failure codes, references to transient inputs needed by the worker, and the media-normalization policy snapshot that governed intake for that submission.
 
 **Why this over alternatives**
 
@@ -67,7 +68,7 @@ Source media and notes will not be stored in Postgres. Instead:
 
 The storage implementation is a narrow internal S3-compatible abstraction shared across environments. The product will not maintain separate shared-filesystem and object-storage code paths. This keeps upload, worker download, cleanup, and end-to-end test behavior aligned across local development, CI, and Heroku deployment.
 
-Heroku-friendly implementations should prefer direct browser-to-object-storage uploads via short-lived presigned URLs rather than proxying large media files through the app server. That still exercises the same S3-compatible path in production, local development, and CI.
+Heroku-friendly implementations should prefer direct browser-to-object-storage uploads via short-lived presigned URLs rather than proxying large media files through the app server. That still exercises the same S3-compatible path in production, local development, and CI whether the browser uploads the original validated source file or a browser-normalized MP3 derivative.
 
 The bucket configuration must explicitly allow the direct browser upload path. At minimum, it must allow browser-origin CORS for the presigned upload method used by the platform, currently `PUT`, from:
 
@@ -83,6 +84,36 @@ Required request headers for the presigned upload flow must also be allowed, or 
 - Over using a shared filesystem in development: filesystem-only development would diverge from Heroku production and add extra boilerplate.
 - Over keeping notes only in Redis job payloads: the notes would still be durable inside queue infrastructure and harder to audit for deletion.
 - Over proxying large media uploads through the app server: presigned uploads reduce dyno memory and timeout pressure while keeping object lifecycle under first-party control.
+
+### Decision: Use a database-backed Mediabunny normalization policy before direct upload
+
+Before direct upload begins, the Next.js web runtime reads a Postgres-backed submission setting:
+
+- `mediaNormalizationPolicy`: `optional` or `required`
+
+This setting is operator-controlled in the database. No admin UI for changing it is included in this change.
+
+For each accepted submission, the current policy is snapshotted into the processing job so in-flight submissions keep stable behavior even if the operator flips the database switch later.
+
+Normalization rules:
+
+- when the user selects an audio file, the browser tries to convert it to MP3 before upload
+- when the user selects a video file, the browser tries to extract the primary audio track and upload that extracted audio as MP3
+- when `mediaNormalizationPolicy` is `optional`, browser-side extraction or conversion may fail and the submission flow falls back to uploading the original validated file unchanged
+- when `mediaNormalizationPolicy` is `required`, browser-side extraction or conversion must succeed before queueing; otherwise the submission is rejected before upload handoff completes
+- raw video upload remains supported as a fallback path only while the current policy is `optional`, and original audio upload remains the fallback only while the current policy is `optional`
+
+This policy changes submission-intake strictness, but it does not change the durable content contract. The product still accepts one user-selected audio or video file per submission. The transcript record keeps `source media kind` as the user's original selected kind, while the job input may be either the original validated media file or a browser-produced MP3 derivative.
+
+The browser-side normalization tool for this change is [`Mediabunny`](https://mediabunny.dev/guide/introduction), using the browser APIs and flows documented in its [quick start guide](https://mediabunny.dev/guide/quick-start).
+
+**Why this over alternatives**
+
+- Over an environment-variable or deploy-time toggle: a database-backed policy lets the operator change intake strictness without redeploying the application.
+- Over re-evaluating the latest policy while a submission is already in progress: snapshotting the policy onto the job prevents in-flight uploads from changing behavior unexpectedly.
+- Over requiring browser-side extraction or conversion for every submission: browser codec support still varies, so an `optional` mode preserves a reliable fallback path.
+- Over using `ffmpeg.wasm` as the default upload-time optimization path: `Mediabunny` is more aligned with a narrow browser-native normalization task and avoids the heavier bundle and memory profile of a full FFmpeg port.
+- Over leaving all video and audio normalization to the worker: opportunistic client-side MP3 conversion can reduce upload size and server-side preprocessing work when the browser can do it safely.
 
 ### Decision: Processing runs only through shared `libs/audio-recap` modules, not CLI subprocesses
 
@@ -141,7 +172,7 @@ Durable metadata stored alongside the markdown is intentionally minimal:
 - owner identifier
 - processing status
 - AI-generated title
-- source media kind (`audio` or `video`)
+- source media kind (the user's original selected kind: `audio` or `video`)
 - original media duration
 - `submittedWithNotes` flag
 - created/updated/completed timestamps
@@ -213,6 +244,8 @@ Keeping title generation as a separate stage preserves the existing recap markdo
 
 - [Creating transcript rows before success means failed items can persist] -> Keep failed records privacy-minimal, store only generic error summaries, and allow later management features to delete or retry them.
 - [S3-compatible storage and presigned uploads add endpoint and CORS configuration] -> Keep one env-var contract for AWS S3 and MinIO, auto-create local and CI buckets, configure browser-direct `PUT` upload CORS for local/CI/prod origins, and run end-to-end coverage against the same S3-compatible path.
+- [Database-backed normalization policy can change while users are mid-submission] -> Snapshot the current policy onto the processing job and apply policy flips only to new submissions.
+- [Browser-side MP3 normalization can behave differently across browsers and codecs] -> In `optional` mode, fall back to the original validated file; in `required` mode, block queueing with a clear user-visible validation error when normalization cannot complete.
 - [Timestamp normalization can introduce edge-case rounding drift] -> Use duration-ratio scaling, clamp to original media bounds, and keep segment ordering stable after normalization.
 - [Dedicated title generation adds another LLM step] -> Use the same retry envelope as recap generation and keep the prompt narrowly scoped to title generation.
 - [Cleanup-before-terminal-state can delay success visibility] -> Keep cleanup fast, make it idempotent, and isolate it as a short finalization stage rather than mixing it into content generation steps.
@@ -221,7 +254,7 @@ Keeping title generation as a separate stage preserves the existing recap markdo
 
 1. Build the submission and job-tracking schema on top of the platform/auth foundations from the previous change.
 2. Refactor `libs/audio-recap` so the worker can call reusable processing helpers and a new web-safe rendering path.
-3. Add the authenticated submission endpoint and transcript-status surfaces in the Next.js web runtime.
+3. Add the authenticated submission endpoint and transcript-status surfaces in the Next.js web runtime, including database-backed `Mediabunny` normalization policy enforcement before direct upload.
 4. Add worker execution for preprocessing, transcription, recap generation, title generation, timestamp normalization, persistence, and cleanup.
 5. Persist canonical transcript records and enforce terminal cleanup guarantees for transient media and notes.
 6. Layer later transcript management, sharing, and export changes on top of the resulting transcript record model.

@@ -13,9 +13,9 @@
 
 ## 3. Client-Side Export Infrastructure
 
-- [ ] 3.1 Add frontend export helpers that assemble one canonical export document from display title, recap markdown, and transcript markdown.
-- [ ] 3.2 Implement local conversion of the assembled export document into `md` and `txt`.
-- [ ] 3.3 Implement local conversion of the assembled export document into `pdf` and `docx`.
+- [ ] 3.1 Add frontend export helpers that assemble one canonical export document from display title, recap markdown, and transcript markdown, then parse it with `unified`, `remark-parse`, and `remark-gfm`.
+- [ ] 3.2 Implement local conversion of the assembled export document into `md` and `txt`, using direct markdown download for `md` and `mdast-util-to-string` for `txt`.
+- [ ] 3.3 Implement local conversion of the assembled export document into `pdf` and `docx` using `remark-pdf` and `remark-docx`.
 - [ ] 3.4 Add export error handling so failed client-side conversion surfaces a user-visible error without mutating transcript content.
 
 ## 4. Authenticated Export UX
@@ -29,4 +29,4 @@
 - [ ] 5.1 Add automated coverage for share enable, disable, rotate, double-UUID link resolution, and private-library shared/unshared sort and filter behavior.
 - [ ] 5.2 Add automated coverage for privacy-minimal public rendering and generic unavailable behavior for invalid links.
 - [ ] 5.3 Add automated coverage for authenticated export authorization, completed-only export gating, and public-page absence of export controls.
-- [ ] 5.4 Add automated coverage for client-side export assembly and conversion across `md`, `txt`, `pdf`, and `docx`.
+- [ ] 5.4 Add automated coverage for client-side export assembly and conversion across `md`, `txt`, `pdf`, and `docx`, including the selected `remark`-based export pipeline.
