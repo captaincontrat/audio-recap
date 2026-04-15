@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "hooks": {
+    "afterFileEdit": [
+      {
+        "command": ".cursor/hooks/format-edited-file.mjs",
+        "timeout": 15
+      }
+    ],
+    "afterTabFileEdit": [
+      {
+        "command": ".cursor/hooks/format-edited-file.mjs",
+        "timeout": 15
+      }
+    ]
+  }
+}

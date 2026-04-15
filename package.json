@@ -3,10 +3,10 @@
   "private": true,
   "description": "pnpm workspace for the Audio Recap CLI and future web app",
   "scripts": {
-    "check": "pnpm --filter ./libs/audio-recap check",
-    "format": "pnpm --filter ./libs/audio-recap format",
-    "lint": "pnpm --filter ./libs/audio-recap lint",
+    "check": "pnpm --filter ./app --filter ./libs/audio-recap check",
+    "format": "pnpm --filter ./app --filter ./libs/audio-recap format",
+    "lint": "pnpm --filter ./app --filter ./libs/audio-recap lint",
     "process:meeting": "pnpm --filter ./libs/audio-recap process:meeting",
-    "typecheck": "pnpm --filter ./libs/audio-recap typecheck"
+    "typecheck": "pnpm --filter ./app --filter ./libs/audio-recap typecheck"
   }
 }
