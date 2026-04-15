@@ -60,16 +60,21 @@ The processing job is an execution record owned by the transcript. It stores sta
 
 Source media and notes will not be stored in Postgres. Instead:
 
-- the server stores uploaded media in a transient worker-accessible blob location
-- optional notes are stored as a transient text blob alongside the media
+- uploaded media is stored in transient S3-compatible object storage
+- production uses private AWS S3, while local development and CI use MinIO or another ephemeral S3-compatible service
+- optional notes are stored as a transient text object alongside the media in the same storage system
 - the processing job stores only opaque references to those transient inputs
 
-The storage implementation is an internal transient-input abstraction. Development can use a shared filesystem location; production can use another backend behind the same abstraction. The key requirement is that the worker can read the inputs and the platform can delete them deterministically.
+The storage implementation is a narrow internal S3-compatible abstraction shared across environments. The product will not maintain separate shared-filesystem and object-storage code paths. This keeps upload, worker download, cleanup, and end-to-end test behavior aligned across local development, CI, and Heroku deployment.
+
+Heroku-friendly implementations should prefer direct browser-to-object-storage uploads via short-lived presigned URLs rather than proxying large media files through the app server. That still exercises the same S3-compatible path in production, local development, and CI.
 
 **Why this over alternatives**
 
 - Over storing media or notes in Postgres: large binary and text payloads do not belong in the system of record for this product.
+- Over using a shared filesystem in development: filesystem-only development would diverge from Heroku production and add extra boilerplate.
 - Over keeping notes only in Redis job payloads: the notes would still be durable inside queue infrastructure and harder to audit for deletion.
+- Over proxying large media uploads through the app server: presigned uploads reduce dyno memory and timeout pressure while keeping object lifecycle under first-party control.
 
 ### Decision: Processing runs only through shared `libs/audio-recap` modules, not CLI subprocesses
 
@@ -199,7 +204,7 @@ Keeping title generation as a separate stage preserves the existing recap markdo
 ## Risks / Trade-offs
 
 - [Creating transcript rows before success means failed items can persist] -> Keep failed records privacy-minimal, store only generic error summaries, and allow later management features to delete or retry them.
-- [Transient-input abstractions add one more moving part] -> Limit the abstraction to create/read/delete semantics and keep the implementation swappable without changing transcript logic.
+- [S3-compatible storage and presigned uploads add endpoint and CORS configuration] -> Keep one env-var contract for AWS S3 and MinIO, auto-create local and CI buckets, and run end-to-end coverage against the same S3-compatible path.
 - [Timestamp normalization can introduce edge-case rounding drift] -> Use duration-ratio scaling, clamp to original media bounds, and keep segment ordering stable after normalization.
 - [Dedicated title generation adds another LLM step] -> Use the same retry envelope as recap generation and keep the prompt narrowly scoped to title generation.
 - [Cleanup-before-terminal-state can delay success visibility] -> Keep cleanup fast, make it idempotent, and isolate it as a short finalization stage rather than mixing it into content generation steps.
@@ -208,7 +213,7 @@ Keeping title generation as a separate stage preserves the existing recap markdo
 
 1. Build the submission and job-tracking schema on top of the platform/auth foundations from the previous change.
 2. Refactor `libs/audio-recap` so the worker can call reusable processing helpers and a new web-safe rendering path.
-3. Add the authenticated submission endpoint and transcript-status surfaces in `app/server`.
+3. Add the authenticated submission endpoint and transcript-status surfaces in the Next.js web runtime.
 4. Add worker execution for preprocessing, transcription, recap generation, title generation, timestamp normalization, persistence, and cleanup.
 5. Persist canonical transcript records and enforce terminal cleanup guarantees for transient media and notes.
 6. Layer later transcript management, sharing, and export changes on top of the resulting transcript record model.

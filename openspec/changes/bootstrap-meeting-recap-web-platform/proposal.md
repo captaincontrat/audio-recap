@@ -4,7 +4,7 @@ The repository currently provides only a local CLI pipeline, while the product b
 
 ## What Changes
 
-- Establish the baseline web platform topology for the future product: browser app in `app/`, authenticated API/BFF, background worker, Postgres for durable application data, and Redis for asynchronous job coordination.
+- Establish the baseline web platform topology for the future product: a Next.js web app in `app/`, Better Auth-backed authentication, a BullMQ worker, Postgres for durable application data, Redis for asynchronous job coordination, and S3-compatible transient blob storage.
 - Define the platform rule that the web app reuses shared meeting-processing modules from `libs/audio-recap` instead of shelling out to the CLI, so the CLI and web worker can share one pipeline core.
 - Add account authentication for individual users with email/password sign-up and sign-in, Google sign-in, session-based authentication, sign out, email verification, password reset, and account deletion.
 - Define the system boundaries needed by future changes, including transcript ownership, worker-triggered processing, and privacy-oriented handling of transient source media.
@@ -20,8 +20,8 @@ The repository currently provides only a local CLI pipeline, while the product b
 
 ## Impact
 
-- `app/` becomes the web product entrypoint and must evolve beyond the current Vite-only scaffold.
-- New backend runtime surfaces are required for an authenticated API/BFF and a background worker connected through Redis-backed jobs.
+- `app/` becomes the Next.js web product entrypoint and must evolve from a frontend foundation into the authenticated product runtime plus worker boundary.
+- New backend runtime surfaces are required inside the Next.js app plus a background worker connected through BullMQ/Redis-backed jobs.
 - Postgres becomes the system of record for users, sessions, identity links, and future transcript ownership metadata.
 - `libs/audio-recap` must be reusable as shared pipeline code instead of being treated only as a CLI wrapper.
-- Email delivery and Google OAuth integration become required external dependencies for account lifecycle flows.
+- Email delivery, Google OAuth integration, and S3-compatible blob storage become required external dependencies for account lifecycle flows and future upload handling.

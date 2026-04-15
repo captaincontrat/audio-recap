@@ -1,8 +1,8 @@
 ## 1. Submission And Persistence Foundations
 
 - [ ] 1.1 Add the Postgres schema and migrations for transcript records, processing-job records, processing statuses, generic failure fields, and privacy-safe transcript metadata.
-- [ ] 1.2 Implement the transient input storage abstraction for uploaded media and optional notes, including create/read/delete operations usable by both the server and worker.
-- [ ] 1.3 Implement the authenticated submission endpoint that validates one audio/video file plus optional notes, creates the transcript and processing-job records, stores transient inputs, and enqueues the job.
+- [ ] 1.2 Implement the transient S3-compatible input storage abstraction for uploaded media and optional notes, including MinIO-backed local/CI usage and create/read/delete operations usable by both the Next.js web runtime and worker.
+- [ ] 1.3 Implement the authenticated submission initiation flow in the Next.js web runtime that validates one audio/video file plus optional notes, issues short-lived presigned upload details, creates the transcript and processing-job records, and enqueues the job once upload handoff succeeds.
 
 ## 2. Shared Processing Pipeline
 
@@ -18,12 +18,12 @@
 
 ## 4. App And API Status Surfaces
 
-- [ ] 4.1 Build the protected web submission flow in `app/` for uploading one audio/video file and optional notes with pre-queue validation feedback.
+- [ ] 4.1 Build the protected web submission flow in `app/` for direct browser-to-S3-compatible upload of one audio/video file and optional notes with pre-queue validation feedback.
 - [ ] 4.2 Add transcript-status read surfaces that let the browser poll and display queued, in-progress, retrying, completed, and failed states from the transcript record.
 - [ ] 4.3 Render completed transcript records from canonical `transcriptMarkdown`, `recapMarkdown`, title, and privacy-safe metadata rather than from transient input data.
 
 ## 5. Validation And Regression Coverage
 
-- [ ] 5.1 Add automated coverage for submission validation, transcript-record creation, and transient-input handling.
+- [ ] 5.1 Add automated coverage for submission validation, presigned upload initiation, transcript-record creation, and transient-input handling against the MinIO-backed local/CI storage path.
 - [ ] 5.2 Add automated coverage for worker orchestration, timestamp normalization, recap/title generation, retry behavior, and generic failure handling.
 - [ ] 5.3 Add automated coverage for retention guarantees, including deletion of source media and transient notes before terminal transcript states are published.

@@ -23,7 +23,7 @@ The transcript record is now defined as the durable product resource and users c
 
 ## Impact
 
-- `app/server` must add owner-scoped share management actions, share-state projections for private library organization, and a public read-only share surface that does not rely on authenticated transcript access rules.
+- The Next.js web runtime must add owner-scoped share management actions, share-state projections for private library organization, and a public read-only share surface that does not rely on authenticated transcript access rules.
 - Transcript persistence must support share state, stable public share identifiers, rotatable share secrets, and privacy-minimal public projections.
 - `app/` must add share controls to transcript management surfaces, share-state organization controls in the private library, a public read-only transcript page, and client-side export flows for the four required formats.
 - The frontend export path must introduce local markdown conversion logic while preserving the rule that the backend only sends markdown to the frontend.

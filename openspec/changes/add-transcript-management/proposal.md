@@ -22,6 +22,6 @@ The platform, authentication, processing, and retention foundations are now defi
 ## Impact
 
 - `app/` gains the first persistent post-processing product surfaces: transcript library and transcript detail views.
-- `app/server` must add transcript list, detail, update, tag, important-toggle, search/filter/sort, and delete endpoints with ownership enforcement, including explicit important-state and tag-aware library sorting behavior.
+- The Next.js web runtime must add transcript list, detail, update, tag, important-toggle, search/filter/sort, and delete endpoints with ownership enforcement, including explicit important-state and tag-aware library sorting behavior.
 - Postgres transcript persistence must support user-managed title changes, tags, importance, searchability, derived tag sort keys, and efficient library pagination.
 - The frontend must render and submit canonical markdown for transcript and recap editing without changing the markdown-first backend contract.
