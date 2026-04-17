@@ -179,6 +179,72 @@ export const workspaceMembership = pgTable(
   ],
 );
 
+// Invitation lifecycle from `workspace-membership-and-invitations`.
+//
+// Each row is the durable record for one email/workspace/role target.
+// The lifecycle transitions are:
+//   pending → accepted   (acceptance consumes the current token hash)
+//   pending → revoked    (admin revokes; row is retained for audit)
+//   pending → expired    (past `expiresAt`; surfaced as "invalid link"
+//                        until the sweep job or a resend replaces it)
+//   pending → superseded (resend rotates the token; the prior token is
+//                        invalidated immediately and the row's token
+//                        hash is replaced, so consumption uses only the
+//                        latest token)
+//
+// The partial-unique index on `(workspaceId, email)` where `status =
+// 'pending'` keeps at most one active pending invitation per email per
+// workspace. Resend mutates the existing row in place; revoke marks it
+// terminal; acceptance stamps `consumed_at`; expiry is computed from
+// `expires_at`.
+export const workspaceInvitationStatus = pgEnum("workspace_invitation_status", ["pending", "accepted", "revoked", "expired", "superseded"]);
+
+export const workspaceInvitation = pgTable(
+  "workspace_invitation",
+  {
+    id: text("id").primaryKey(),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspace.id, { onDelete: "cascade" }),
+    // Stored lowercased + trimmed, matching `normalizeEmail` output so
+    // lookups and the partial-unique index stay deterministic whether
+    // the invitee has an account yet or not.
+    email: text("email").notNull(),
+    role: workspaceRole("role").notNull(),
+    status: workspaceInvitationStatus("status").notNull().default("pending"),
+    // `token_hash` is nullable because terminal statuses (accepted,
+    // revoked, expired, superseded) MUST NOT keep a usable token even
+    // if the row is retained for audit. Pending rows always have a
+    // non-null hash; the partial-unique index below enforces that too.
+    tokenHash: text("token_hash"),
+    expiresAt: timestamp("expires_at", { withTimezone: true, mode: "date" }).notNull(),
+    // Filled when `status = 'accepted'` — points to the user account
+    // that consumed the invitation. Kept nullable because pending and
+    // other terminal rows have no consumer.
+    consumedAt: timestamp("consumed_at", { withTimezone: true, mode: "date" }),
+    consumedByUserId: text("consumed_by_user_id").references(() => user.id, { onDelete: "set null" }),
+    // Admin that issued the invitation. Left nullable so the row
+    // survives account removal of the inviter — the workspace+role
+    // record stays intact even if the original admin closes their
+    // account later.
+    invitedByUserId: text("invited_by_user_id").references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (table) => [
+    // At most one pending invitation per (workspace, normalized email).
+    // Terminal statuses are excluded from the index so an accepted or
+    // revoked invitation never blocks a fresh invite to the same email.
+    uniqueIndex("workspace_invitation_pending_unique").on(table.workspaceId, table.email).where(sql`${table.status} = 'pending'`),
+    // Token lookup is always scoped to pending invitations; the partial
+    // index keeps it lean and prevents leaked terminal-row tokens from
+    // being reusable even as rows accumulate.
+    uniqueIndex("workspace_invitation_token_hash_unique").on(table.tokenHash).where(sql`${table.status} = 'pending' AND ${table.tokenHash} IS NOT NULL`),
+    index("workspace_invitation_workspace_status_idx").on(table.workspaceId, table.status),
+    index("workspace_invitation_email_idx").on(table.email),
+  ],
+);
+
 export type UserRow = typeof user.$inferSelect;
 export type InsertUserRow = typeof user.$inferInsert;
 export type SessionRow = typeof session.$inferSelect;
@@ -190,5 +256,8 @@ export type WorkspaceRow = typeof workspace.$inferSelect;
 export type InsertWorkspaceRow = typeof workspace.$inferInsert;
 export type WorkspaceMembershipRow = typeof workspaceMembership.$inferSelect;
 export type InsertWorkspaceMembershipRow = typeof workspaceMembership.$inferInsert;
+export type WorkspaceInvitationRow = typeof workspaceInvitation.$inferSelect;
+export type InsertWorkspaceInvitationRow = typeof workspaceInvitation.$inferInsert;
 export type WorkspaceType = (typeof workspaceType.enumValues)[number];
 export type WorkspaceRole = (typeof workspaceRole.enumValues)[number];
+export type WorkspaceInvitationStatus = (typeof workspaceInvitationStatus.enumValues)[number];

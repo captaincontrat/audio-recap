@@ -14,7 +14,15 @@ export type PasswordResetEmail = {
   userName?: string | null;
 };
 
-export type AuthEmail = VerificationEmail | PasswordResetEmail;
+export type WorkspaceInvitationEmail = {
+  type: "workspace-invitation";
+  to: string;
+  url: string;
+  workspaceName: string;
+  inviterName?: string | null;
+};
+
+export type AuthEmail = VerificationEmail | PasswordResetEmail | WorkspaceInvitationEmail;
 
 export type SendResult = {
   id: string;
@@ -30,14 +38,15 @@ export function renderSubject(email: AuthEmail): string {
       return "Verify your Summitdown email address";
     case "password-reset":
       return "Reset your Summitdown password";
+    case "workspace-invitation":
+      return `You're invited to join ${email.workspaceName} on Summitdown`;
   }
 }
 
 export function renderPlainText(email: AuthEmail): string {
-  const greeting = email.userName ? `Hi ${email.userName},` : "Hi,";
-
   switch (email.type) {
-    case "verification":
+    case "verification": {
+      const greeting = email.userName ? `Hi ${email.userName},` : "Hi,";
       return [
         greeting,
         "",
@@ -47,7 +56,9 @@ export function renderPlainText(email: AuthEmail): string {
         "",
         "If you did not create a Summitdown account you can ignore this message.",
       ].join("\n");
-    case "password-reset":
+    }
+    case "password-reset": {
+      const greeting = email.userName ? `Hi ${email.userName},` : "Hi,";
       return [
         greeting,
         "",
@@ -59,6 +70,23 @@ export function renderPlainText(email: AuthEmail): string {
         "",
         "If you did not request a password reset you can ignore this message.",
       ].join("\n");
+    }
+    case "workspace-invitation": {
+      const opener = email.inviterName
+        ? `${email.inviterName} invited you to join ${email.workspaceName} on Summitdown.`
+        : `You've been invited to join ${email.workspaceName} on Summitdown.`;
+      return [
+        "Hi,",
+        "",
+        opener,
+        "",
+        "Open the link below to accept the invitation. The link can be used once and expires in 7 days:",
+        "",
+        email.url,
+        "",
+        "If you were not expecting this invitation you can ignore this message.",
+      ].join("\n");
+    }
   }
 }
 

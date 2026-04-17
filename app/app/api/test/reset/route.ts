@@ -12,6 +12,7 @@ const TABLES = [
   "session",
   "account",
   "verification",
+  "workspace_invitation",
   "workspace_membership",
   "workspace",
   '"user"',

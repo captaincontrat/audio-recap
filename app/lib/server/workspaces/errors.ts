@@ -75,3 +75,41 @@ function defaultArchivalEligibilityMessage(reason: ArchivalEligibilityRefusalRea
       return "Audio processing work is still in progress for this workspace";
   }
 }
+
+// Generic "this invitation link is not valid" error. Kept deliberately
+// neutral because the `workspace-membership-and-invitations` spec
+// requires expired, revoked, superseded, consumed, and not-found
+// tokens to collapse to the same outward behavior so acceptance never
+// leaks invitation lifecycle state to anonymous callers.
+export class InvalidInvitationError extends Error {
+  readonly code = "invitation_invalid" as const;
+  constructor(message = "This invitation link is no longer valid") {
+    super(message);
+    this.name = "InvalidInvitationError";
+  }
+}
+
+// Raised when acceptance is attempted by an account whose email does
+// not match the invited normalized email. Distinct from
+// `InvalidInvitationError` because the invited person can still
+// recover by signing into (or creating) the account that matches the
+// invited email address.
+export class InvitationEmailMismatchError extends Error {
+  readonly code = "invitation_email_mismatch" as const;
+  constructor(message = "This invitation is addressed to a different email address") {
+    super(message);
+    this.name = "InvitationEmailMismatchError";
+  }
+}
+
+// Raised when an admin attempts to invite a user that already has a
+// membership. Distinct from `InvalidInvitationError` because the issue
+// is on the issuance side and an admin may want to use the role-change
+// flow instead.
+export class InvitationTargetAlreadyMemberError extends Error {
+  readonly code = "invitation_target_already_member" as const;
+  constructor(message = "This account is already a member of the workspace") {
+    super(message);
+    this.name = "InvitationTargetAlreadyMemberError";
+  }
+}

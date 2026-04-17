@@ -55,6 +55,9 @@ export {
 export {
   ArchivalEligibilityError,
   type ArchivalEligibilityRefusalReason,
+  InvalidInvitationError,
+  InvitationEmailMismatchError,
+  InvitationTargetAlreadyMemberError,
   LastEligibleAdminError,
   PersonalWorkspaceViolationError,
   WorkspaceAccessDeniedError,
@@ -65,6 +68,75 @@ export {
 export { assertCanLeaveOrDeletePersonalWorkspace, assertCanModifyAdminMembership } from "./invariant-guards";
 
 export { type AdminAccountRow, wouldViolateLastEligibleAdminInvariant } from "./invariants";
+
+export {
+  type AddMembershipArgs,
+  addWorkspaceMembership,
+  type ChangeMembershipRoleArgs,
+  changeWorkspaceMembershipRole,
+  MembershipRoleUnchangedError,
+  type RemoveMembershipArgs,
+  removeWorkspaceMembership,
+} from "./membership-admin";
+
+export {
+  type AddMembershipInputs,
+  type CallerContext,
+  type ChangeRoleInputs,
+  evaluateAddMembership,
+  evaluateAdminPreconditions,
+  evaluateChangeRole,
+  evaluateRemoveMembership,
+  type MembershipMutationKind,
+  type MembershipMutationOutcome,
+  type MembershipMutationRefusalReason,
+  type RemoveMembershipInputs,
+  type WorkspaceShape,
+} from "./membership-decisions";
+
+export {
+  type AcceptInvitationArgs,
+  type AcceptInvitationResult,
+  acceptWorkspaceInvitation,
+  expirePendingInvitations,
+  findPendingInvitationByToken,
+  invalidateWorkspaceInvitationsOnArchive,
+  type IssueInvitationArgs,
+  type IssueInvitationResult,
+  issueWorkspaceInvitation,
+  listWorkspaceInvitations,
+  MembershipAlreadyExistsError,
+  type ResendInvitationArgs,
+  resendWorkspaceInvitation,
+  type RevokeInvitationArgs,
+  revokeWorkspaceInvitation,
+} from "./invitations";
+
+export {
+  INVITATION_ARCHIVE_EFFECT_ID,
+  invitationArchiveSideEffect,
+  registerInvitationArchiveSideEffect,
+  unregisterInvitationArchiveSideEffect,
+} from "./invitation-archive-effect";
+
+export { registerWorkspaceArchiveSideEffects } from "./bootstrap";
+
+export {
+  type AcceptInvitationInputs,
+  classifyInvitationValidity,
+  computeInvitationExpiry,
+  evaluateAcceptInvitation,
+  evaluateInvitationAdminPreconditions,
+  evaluateIssueInvitation,
+  type GenericInvalidInvitationReason,
+  INVITATION_TTL_MS,
+  type InvitationAcceptanceOutcome,
+  type InvitationAcceptanceRefusalReason,
+  type InvitationIssueRefusalReason,
+  type InvitationMutationOutcome,
+  type InvitationRowShape,
+  type IssueInvitationInputs,
+} from "./invitation-decisions";
 
 export {
   type ExplicitDestination,

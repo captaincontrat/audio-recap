@@ -54,10 +54,15 @@ export default defineConfig({
         // `/api/test/workspaces` harness.
         "lib/server/workspaces/personal.ts",
         "lib/server/workspaces/memberships.ts",
+        "lib/server/workspaces/membership-admin.ts",
         "lib/server/workspaces/invariant-guards.ts",
         "lib/server/workspaces/resolver.ts",
         "lib/server/workspaces/archival.ts",
+        "lib/server/workspaces/invitations.ts",
+        "lib/server/workspaces/invitation-archive-effect.ts",
+        "lib/server/workspaces/bootstrap.ts",
         "lib/server/workspaces/index.ts",
+        "instrumentation.ts",
         // Next.js pages and route handlers are covered by Playwright
         // end-to-end tests. They are thin view layers that wire imported
         // services to routes/forms; unit coverage would mostly mirror the

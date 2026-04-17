@@ -16,6 +16,22 @@ const resetEmail: AuthEmail = {
   userName: null,
 };
 
+const invitationEmail: AuthEmail = {
+  type: "workspace-invitation",
+  to: "ada@example.com",
+  url: "https://app.example.com/invitations?token=abc",
+  workspaceName: "Acme",
+  inviterName: "Grace",
+};
+
+const anonymousInvitationEmail: AuthEmail = {
+  type: "workspace-invitation",
+  to: "ada@example.com",
+  url: "https://app.example.com/invitations?token=xyz",
+  workspaceName: "Acme",
+  inviterName: null,
+};
+
 describe("renderSubject", () => {
   test("uses a verification-specific subject", () => {
     expect(renderSubject(verificationEmail)).toBe("Verify your Summitdown email address");
@@ -23,6 +39,10 @@ describe("renderSubject", () => {
 
   test("uses a reset-specific subject", () => {
     expect(renderSubject(resetEmail)).toBe("Reset your Summitdown password");
+  });
+
+  test("names the workspace in the invitation subject", () => {
+    expect(renderSubject(invitationEmail)).toBe("You're invited to join Acme on Summitdown");
   });
 });
 
@@ -35,6 +55,25 @@ describe("renderPlainText", () => {
   test("falls back to an anonymous greeting when name is missing", () => {
     expect(renderPlainText(resetEmail).startsWith("Hi,")).toBe(true);
     expect(renderPlainText(resetEmail)).toContain(resetEmail.url);
+  });
+
+  test("greets the user by name in password-reset emails too", () => {
+    const namedReset = { ...resetEmail, userName: "Ada" } satisfies AuthEmail;
+    expect(renderPlainText(namedReset)).toContain("Hi Ada,");
+    expect(renderPlainText(namedReset)).toContain(namedReset.url);
+  });
+
+  test("names the inviter and the workspace when available", () => {
+    const body = renderPlainText(invitationEmail);
+    expect(body).toContain("Grace invited you to join Acme on Summitdown");
+    expect(body).toContain(invitationEmail.url);
+    expect(body).toContain("expires in 7 days");
+  });
+
+  test("falls back to an anonymous invitation opener when inviter name is missing", () => {
+    const body = renderPlainText(anonymousInvitationEmail);
+    expect(body).toContain("You've been invited to join Acme on Summitdown");
+    expect(body).toContain(anonymousInvitationEmail.url);
   });
 });
 

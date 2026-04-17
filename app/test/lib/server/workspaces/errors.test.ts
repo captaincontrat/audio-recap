@@ -2,6 +2,9 @@ import { describe, expect, test } from "vitest";
 
 import {
   ArchivalEligibilityError,
+  InvalidInvitationError,
+  InvitationEmailMismatchError,
+  InvitationTargetAlreadyMemberError,
   LastEligibleAdminError,
   PersonalWorkspaceViolationError,
   WorkspaceAccessDeniedError,
@@ -76,5 +79,32 @@ describe("workspace error classes", () => {
     const err = new ArchivalEligibilityError("upload_in_progress", "Retry after the upload finishes");
     expect(err.message).toBe("Retry after the upload finishes");
     expect(err.reason).toBe("upload_in_progress");
+  });
+
+  test("InvalidInvitationError exposes the generic invitation-invalid code and a neutral default message", () => {
+    const err = new InvalidInvitationError();
+    expect(err).toBeInstanceOf(Error);
+    expect(err.code).toBe("invitation_invalid");
+    expect(err.name).toBe("InvalidInvitationError");
+    expect(err.message).toMatch(/invitation/i);
+  });
+
+  test("InvalidInvitationError accepts a custom message", () => {
+    const err = new InvalidInvitationError("Only pending invitations can be resent");
+    expect(err.message).toBe("Only pending invitations can be resent");
+  });
+
+  test("InvitationEmailMismatchError uses a dedicated code so acceptance can route to the correct account", () => {
+    const err = new InvitationEmailMismatchError();
+    expect(err.code).toBe("invitation_email_mismatch");
+    expect(err.name).toBe("InvitationEmailMismatchError");
+    expect(err.message).toMatch(/email/i);
+  });
+
+  test("InvitationTargetAlreadyMemberError uses a dedicated code so admins can switch to role-change", () => {
+    const err = new InvitationTargetAlreadyMemberError();
+    expect(err.code).toBe("invitation_target_already_member");
+    expect(err.name).toBe("InvitationTargetAlreadyMemberError");
+    expect(err.message).toMatch(/member/i);
   });
 });
