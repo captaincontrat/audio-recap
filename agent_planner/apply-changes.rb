@@ -12,15 +12,18 @@ module AgentPlanner
       "bootstrap-meeting-recap-web-platform",
       "add-workspace-foundation",
       "add-workspace-archival-lifecycle",
-      "add-workspace-membership-and-invitations",
+      "add-workspace-memabership-and-invitations",
+      "add-meeting-processing-foundation",
       "add-web-meeting-processing",
       "add-transcript-management",
-      "add-transcript-curation-controls",
       "add-transcript-edit-sessions",
+      "add-transcript-curation-controls",
       "add-public-transcript-sharing",
       "add-client-side-transcript-export",
+      "add-federated-and-passwordless-auth",
       "add-account-security-hardening",
       "add-account-closure-retention",
+      "add-auth-localization-foundation",
     ].freeze
 
     FIRST_ONLY = false
