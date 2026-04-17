@@ -69,7 +69,7 @@ module AgentPlanner
     def make_sync_prompt(change)
       [
         "Sync the change #{change} with OpenSpec now.",
-        "Use the appropriate sync workflow for this change before archiving it."
+        "Use the appropriate sync workflow for this change, don't archive it yet."
       ].join("\n")
     end
 
