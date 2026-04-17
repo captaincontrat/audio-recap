@@ -6,7 +6,16 @@ import { getDb } from "@/lib/server/db/client";
 import { clearCapturedEmails } from "@/lib/server/email/memory";
 import { getServerEnv } from "@/lib/server/env";
 
-const TABLES = ["password_reset_token", "email_verification_token", "session", "account", "verification", '"user"'] as const;
+const TABLES = [
+  "password_reset_token",
+  "email_verification_token",
+  "session",
+  "account",
+  "verification",
+  "workspace_membership",
+  "workspace",
+  '"user"',
+] as const;
 
 export async function POST() {
   const env = getServerEnv();

@@ -60,3 +60,29 @@ export async function signIn(page: Page, email: string, password: string): Promi
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Sign in" }).click();
 }
+
+export type TestWorkspaceEntry = {
+  membershipId: string;
+  role: "read_only" | "member" | "admin";
+  lastAccessedAt: string | null;
+  workspaceId: string;
+  workspaceType: "personal" | "team";
+  workspaceSlug: string;
+  workspaceName: string;
+  isPersonalOwner: boolean;
+};
+
+export type TestWorkspacesSummary = {
+  ok: boolean;
+  userId: string | null;
+  workspaces: TestWorkspaceEntry[];
+  personalOwned: number;
+};
+
+export async function fetchWorkspacesForEmail(request: APIRequestContext, email: string): Promise<TestWorkspacesSummary> {
+  const response = await request.get(`/api/test/workspaces?email=${encodeURIComponent(email)}`);
+  expect(response.ok(), `workspaces fetch failed: ${response.status()} ${await response.text()}`).toBe(true);
+  const body = (await response.json()) as TestWorkspacesSummary;
+  await response.dispose();
+  return body;
+}

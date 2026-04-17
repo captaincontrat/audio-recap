@@ -6,6 +6,8 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { getDb } from "../server/db/client";
 import { account, session, user, verification } from "../server/db/schema";
 import { getServerEnv } from "../server/env";
+import { childLogger } from "../server/logger";
+import { ensurePersonalWorkspace } from "../server/workspaces/personal";
 import { SESSION_COOKIE_NAME } from "./cookies";
 import { normalizeEmail } from "./normalize";
 import { hashPassword, MIN_PASSWORD_LENGTH, verifyPassword } from "./password";
@@ -58,6 +60,20 @@ function buildAuth() {
               email: normalizeEmail(userData.email),
             },
           }),
+          // Every account gets exactly one personal workspace at bootstrap.
+          // This runs in the same request as the Better Auth `signUp` call
+          // so the workspace is guaranteed to exist before the verification
+          // email (and the post-verify protected surface) are hit. Errors
+          // here intentionally propagate so the API response surfaces a
+          // bootstrap failure rather than silently leaving the account
+          // without a home workspace; retries are safe because
+          // `ensurePersonalWorkspace` is idempotent.
+          after: async (createdUser) => {
+            await ensurePersonalWorkspace({ userId: createdUser.id }).catch((error) => {
+              childLogger({ component: "auth.user.create.after" }).error({ err: error, userId: createdUser.id }, "failed to provision personal workspace");
+              throw error;
+            });
+          },
         },
         update: {
           before: async (userData) => {

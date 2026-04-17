@@ -44,6 +44,17 @@ export default defineConfig({
         "lib/auth/password-reset.ts",
         "lib/auth/guards.ts",
         "lib/auth/api-response.ts",
+        // Workspace modules that touch the Drizzle client. Pure decision
+        // logic (eligibility, landing, slug, invariant simulation, resource
+        // contract shape) lives in sibling modules that are unit-tested
+        // directly; the DB-touching surface here is exercised by e2e flows
+        // (see `test/auth-signup.e2e.ts` asserting personal workspace
+        // creation after sign-up) plus the `/api/test/workspaces` harness.
+        "lib/server/workspaces/personal.ts",
+        "lib/server/workspaces/memberships.ts",
+        "lib/server/workspaces/invariant-guards.ts",
+        "lib/server/workspaces/resolver.ts",
+        "lib/server/workspaces/index.ts",
         // Next.js pages and route handlers are covered by Playwright
         // end-to-end tests. They are thin view layers that wire imported
         // services to routes/forms; unit coverage would mostly mirror the
