@@ -128,13 +128,29 @@ export const workspace = pgTable(
     // column null. The partial-unique index below enforces the
     // "one personal workspace per account" invariant at the database layer.
     personalOwnerUserId: text("personal_owner_user_id").references(() => user.id, { onDelete: "cascade" }),
+    // Archive lifecycle state owned by `workspace-archival-lifecycle`:
+    // - `archived_at` is the moment a team workspace entered the archived
+    //   state. Null means the workspace is currently active.
+    // - `scheduled_delete_at` is the moment the 60-day restoration window
+    //   ends. Set together with `archived_at` and cleared on restore. The
+    //   sweep job uses it to decide when an archived workspace becomes
+    //   eligible for permanent deletion.
+    // - `restored_at` is the most recent restore timestamp and is left in
+    //   place across further lifecycle transitions. Downstream capabilities
+    //   (public sharing in particular) read this to implement the
+    //   "previously enabled public links stay inactive until fresh share
+    //   management" rule: any share whose own `updatedAt` predates
+    //   `restored_at` is treated as not yet re-enabled.
     archivedAt: timestamp("archived_at", { withTimezone: true, mode: "date" }),
+    scheduledDeleteAt: timestamp("scheduled_delete_at", { withTimezone: true, mode: "date" }),
+    restoredAt: timestamp("restored_at", { withTimezone: true, mode: "date" }),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
   },
   (table) => [
     uniqueIndex("workspace_slug_unique").on(table.slug),
     uniqueIndex("workspace_personal_owner_unique").on(table.personalOwnerUserId).where(sql`${table.personalOwnerUserId} IS NOT NULL`),
+    index("workspace_scheduled_delete_idx").on(table.scheduledDeleteAt).where(sql`${table.scheduledDeleteAt} IS NOT NULL`),
   ],
 );
 

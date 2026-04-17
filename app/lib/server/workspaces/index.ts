@@ -4,14 +4,63 @@
 // file layout without breaking downstream call sites.
 
 export {
+  type ArchiveWorkspaceArgs,
+  archiveWorkspace,
+  type PermanentlyDeleteWorkspaceArgs,
+  permanentlyDeleteWorkspace,
+  type RestoreWorkspaceArgs,
+  restoreWorkspace,
+  sweepExpiredArchivedWorkspaces,
+} from "./archival";
+export {
+  type ArchivalEligibilityInputs,
+  type ArchivalEligibilityOutcome,
+  evaluateArchivalEligibility,
+} from "./archival-eligibility";
+export {
+  assertAutosaveAllowed,
+  assertInvitationAcceptanceAllowed,
+  assertPublicShareResolvable,
+  assertTranscriptExportAllowed,
+  assertTranscriptLibraryAccessible,
+  canResumeEditSession,
+} from "./archival-gates";
+export {
+  ArchivalSideEffectError,
+  type ArchiveSideEffect,
+  type ArchiveSideEffectContext,
+  listRegisteredArchiveSideEffects,
+  registerArchiveSideEffect,
+  runArchiveSideEffects,
+  unregisterArchiveSideEffect,
+} from "./archival-side-effects";
+export {
+  computeScheduledDeleteAt,
+  deriveArchivalState,
+  isPastRestorationWindow,
+  isShareSuppressedByRestore,
+  isWorkspaceActive,
+  isWorkspaceArchived,
+  RESTORATION_WINDOW_DAYS,
+  type WorkspaceArchivalState,
+  type WorkspaceArchivalTimestamps,
+} from "./archival-state";
+export {
   type AdminAccountAccessInput,
   countEligibleActiveAdmins as countEligibleActiveAdminsFromInputs,
   type EligibleAdminMembershipInput,
   hasNormalAuthenticatedAccess,
   isEligibleActiveAdmin,
 } from "./eligibility";
-
-export { LastEligibleAdminError, PersonalWorkspaceViolationError, WorkspaceAccessDeniedError, WorkspaceNotFoundError } from "./errors";
+export {
+  ArchivalEligibilityError,
+  type ArchivalEligibilityRefusalReason,
+  LastEligibleAdminError,
+  PersonalWorkspaceViolationError,
+  WorkspaceAccessDeniedError,
+  WorkspaceArchivedError,
+  WorkspaceNotFoundError,
+} from "./errors";
 
 export { assertCanLeaveOrDeletePersonalWorkspace, assertCanModifyAdminMembership } from "./invariant-guards";
 
