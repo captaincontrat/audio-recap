@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { boolean, index, pgEnum, pgTable, primaryKey, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import { boolean, index, integer, jsonb, pgEnum, pgTable, primaryKey, real, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 
 // Tables that Better Auth owns. Column names and types match the conventions
 // the Better Auth Drizzle adapter expects (see
@@ -245,6 +245,139 @@ export const workspaceInvitation = pgTable(
   ],
 );
 
+// Transcript + processing-job foundation owned by the
+// `meeting-import-processing` and `transcript-data-retention` capabilities.
+// See `openspec/changes/add-web-meeting-processing/design.md` for the
+// decisions that shape this schema.
+//
+// Transcripts are durable workspace-owned product resources. Each
+// accepted submission creates both a `transcript` row (the long-lived
+// product resource) and a `processing_job` row (which tracks retries,
+// stages, transient references, and the normalization-policy snapshot
+// captured when the submission was accepted). Terminal transcripts
+// keep only privacy-safe metadata plus canonical markdown content;
+// raw notes, original filenames, local paths, and provider payloads
+// are never persisted here.
+
+export const transcriptStatus = pgEnum("transcript_status", [
+  "queued",
+  "preprocessing",
+  "transcribing",
+  "generating_recap",
+  "generating_title",
+  "finalizing",
+  "retrying",
+  "completed",
+  "failed",
+]);
+
+export const mediaNormalizationPolicyValue = pgEnum("media_normalization_policy_value", ["optional", "required"]);
+
+export const transcriptSourceMediaKind = pgEnum("transcript_source_media_kind", ["audio", "video"]);
+
+export const transcriptFailureCode = pgEnum("transcript_failure_code", ["validation_failed", "processing_failed"]);
+
+// `app_setting` is the database-backed configuration table. Today it
+// carries only the media-normalization policy, but later changes can
+// add rows with new keys without re-migrating the schema. Values are
+// stored as JSON to keep the table agnostic to the setting's shape.
+export const appSetting = pgTable("app_setting", {
+  key: text("key").primaryKey(),
+  value: jsonb("value").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+});
+
+export const transcript = pgTable(
+  "transcript",
+  {
+    id: text("id").primaryKey(),
+    // Workspace ownership follows the shared `workspace-scoped resource`
+    // contract (see `workspaces/resource-contract.ts`). `workspaceId`
+    // is the durable ownership boundary and only changes via explicit
+    // transfer. `createdByUserId` captures creator attribution while
+    // the account exists; later account-lifecycle work may null this
+    // out without changing workspace ownership.
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspace.id, { onDelete: "cascade" }),
+    createdByUserId: text("created_by_user_id").references(() => user.id, { onDelete: "set null" }),
+    status: transcriptStatus("status").notNull().default("queued"),
+    // Canonical durable content produced on successful completion.
+    // Left empty until the worker reaches the finalizing stage.
+    title: text("title").notNull().default(""),
+    transcriptMarkdown: text("transcript_markdown").notNull().default(""),
+    recapMarkdown: text("recap_markdown").notNull().default(""),
+    // Privacy-safe metadata retained for later consultation and
+    // management. `originalDurationSec` may be null when probing fails
+    // before the transcript is published; `submittedWithNotes` records
+    // only whether notes were supplied, not the notes themselves.
+    sourceMediaKind: transcriptSourceMediaKind("source_media_kind").notNull(),
+    originalDurationSec: real("original_duration_sec"),
+    submittedWithNotes: boolean("submitted_with_notes").notNull().default(false),
+    // Terminal failure metadata is intentionally generic so callers
+    // can render a user-safe message without leaking raw provider
+    // errors. `failureCode` classifies the failure family; the
+    // `failureSummary` is a short user-facing string.
+    failureCode: transcriptFailureCode("failure_code"),
+    failureSummary: text("failure_summary"),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+    completedAt: timestamp("completed_at", { withTimezone: true, mode: "date" }),
+  },
+  (table) => [
+    index("transcript_workspace_status_idx").on(table.workspaceId, table.status),
+    index("transcript_workspace_created_idx").on(table.workspaceId, table.createdAt),
+    index("transcript_created_by_idx").on(table.createdByUserId),
+  ],
+);
+
+// `processing_job` owns all the transient execution state that should
+// not pollute the durable transcript record. One job row per transcript
+// follows the submission forward through retries; the partial-unique
+// index below keeps that one-to-one relationship enforced at the
+// database layer while still allowing future schema growth (e.g. a
+// second "reprocess" attempt) to add another row behind a new status.
+//
+// `mediaInputKey` and `notesInputKey` are opaque references into the
+// foundation-owned transient object store. Both are nullable because
+// terminal cleanup deletes the underlying objects and clears the keys
+// before the transcript row is marked `completed` or `failed`. The
+// durable transcript record never stores these references.
+export const processingJob = pgTable(
+  "processing_job",
+  {
+    id: text("id").primaryKey(),
+    transcriptId: text("transcript_id")
+      .notNull()
+      .references(() => transcript.id, { onDelete: "cascade" }),
+    status: transcriptStatus("status").notNull().default("queued"),
+    // Snapshot of the media-normalization policy that was active at
+    // submission time. Later policy changes must not retroactively
+    // apply to in-flight jobs.
+    mediaNormalizationPolicySnapshot: mediaNormalizationPolicyValue("media_normalization_policy_snapshot").notNull(),
+    // Which processing shape the accepted upload uses. Matches the
+    // shared `MeetingInputKind` the worker-facing pipeline consumes.
+    // `$type` narrows the row shape so worker glue can pass the value
+    // to `processMeetingForWorker` without a runtime cast.
+    mediaInputKind: text("media_input_kind").$type<"original" | "mp3-derivative">().notNull(),
+    // Opaque transient-store keys. `upload_id` keeps a deterministic
+    // reference for cleanup; `media_input_key` and `notes_input_key`
+    // are cleared by the worker as part of terminal cleanup.
+    uploadId: text("upload_id").notNull(),
+    mediaInputKey: text("media_input_key"),
+    mediaContentType: text("media_content_type"),
+    notesInputKey: text("notes_input_key"),
+    attempts: integer("attempts").notNull().default(0),
+    maxAttempts: integer("max_attempts").notNull().default(3),
+    lastFailureCode: transcriptFailureCode("last_failure_code"),
+    lastFailureSummary: text("last_failure_summary"),
+    transientCleanupCompletedAt: timestamp("transient_cleanup_completed_at", { withTimezone: true, mode: "date" }),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
+  },
+  (table) => [uniqueIndex("processing_job_transcript_unique").on(table.transcriptId), index("processing_job_status_idx").on(table.status)],
+);
+
 export type UserRow = typeof user.$inferSelect;
 export type InsertUserRow = typeof user.$inferInsert;
 export type SessionRow = typeof session.$inferSelect;
@@ -261,3 +394,13 @@ export type InsertWorkspaceInvitationRow = typeof workspaceInvitation.$inferInse
 export type WorkspaceType = (typeof workspaceType.enumValues)[number];
 export type WorkspaceRole = (typeof workspaceRole.enumValues)[number];
 export type WorkspaceInvitationStatus = (typeof workspaceInvitationStatus.enumValues)[number];
+export type AppSettingRow = typeof appSetting.$inferSelect;
+export type InsertAppSettingRow = typeof appSetting.$inferInsert;
+export type TranscriptRow = typeof transcript.$inferSelect;
+export type InsertTranscriptRow = typeof transcript.$inferInsert;
+export type ProcessingJobRow = typeof processingJob.$inferSelect;
+export type InsertProcessingJobRow = typeof processingJob.$inferInsert;
+export type TranscriptStatus = (typeof transcriptStatus.enumValues)[number];
+export type MediaNormalizationPolicyValue = (typeof mediaNormalizationPolicyValue.enumValues)[number];
+export type TranscriptSourceMediaKind = (typeof transcriptSourceMediaKind.enumValues)[number];
+export type TranscriptFailureCode = (typeof transcriptFailureCode.enumValues)[number];

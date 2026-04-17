@@ -1,19 +1,21 @@
 import { type Job, Worker } from "bullmq";
 
 import { childLogger, jobLogger } from "@/lib/server/logger";
+import type { MeetingJobPayload } from "@/lib/server/meetings";
 import { getRedisConnection } from "@/lib/server/queue/connection";
+import { QUEUE_NAMES } from "@/lib/server/queue/queues";
+import { processMeetingJob } from "@/worker/processors/meetings";
 
 type BullWorker = Worker;
 
 const workers: BullWorker[] = [];
 
 export async function startWorkers(): Promise<void> {
-  // Reduced-bootstrap scope does not define transcript-processing jobs yet.
-  // The worker runtime exists now so follow-up changes only need to register
-  // processors here without reopening platform-topology decisions.
-  //
-  // Keep the process alive even when no workers are registered so deployments
-  // can boot the dyno independently of follow-up change rollouts.
+  // Register the meeting-processing worker. Downstream changes can
+  // register additional processors here without reopening
+  // platform-topology decisions.
+  registerWorker<MeetingJobPayload, void>(QUEUE_NAMES.meetings, (job) => processMeetingJob(job));
+
   if (workers.length === 0) {
     childLogger({ component: "worker.runtime" }).info("no workers registered; worker runtime idle");
   }

@@ -29,3 +29,14 @@ export {
   type PresignedPutRequest,
   type PresignedPutUrlProvider,
 } from "@/lib/server/storage/presign";
+export { downloadTransientObjectToFile } from "@/lib/server/storage/download";
+export {
+  type CreateTransientUploadInput,
+  createTransientPresignedPut,
+  deleteTransientObject,
+  type GetTransientObjectResult,
+  getTransientObjectStream,
+  putTransientObject,
+  type PutTransientObjectInput,
+  transientObjectExists,
+} from "@/lib/server/storage/transient-store";

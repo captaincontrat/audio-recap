@@ -28,6 +28,9 @@ importers:
       '@remixicon/react':
         specifier: ^4.9.0
         version: 4.9.0(react@19.2.5)
+      audio-recap:
+        specifier: workspace:*
+        version: link:../libs/audio-recap
       better-auth:
         specifier: ^1.6.5
         version: 1.6.5(@opentelemetry/api@1.9.1)(drizzle-kit@0.31.10)(drizzle-orm@0.45.2(@opentelemetry/api@1.9.1)(kysely@0.28.16)(postgres@3.4.9))(next@16.1.7(@babel/core@7.29.0)(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(react-dom@19.2.5(react@19.2.5))(react@19.2.5))(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(vitest@4.1.4)
@@ -55,6 +58,9 @@ importers:
       next-themes:
         specifier: ^0.4.6
         version: 0.4.6(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
+      openai:
+        specifier: ^6.32.0
+        version: 6.32.0(zod@4.3.6)
       pino:
         specifier: ^10.3.1
         version: 10.3.1

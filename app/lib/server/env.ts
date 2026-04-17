@@ -42,6 +42,15 @@ const serverEnvSchema = z.object({
     ),
 
   LOG_LEVEL: z.enum(["trace", "debug", "info", "warn", "error", "fatal", "silent"]).default("info"),
+
+  // Optional so the web app and local tooling boot without the worker
+  // secret. The worker runtime explicitly asserts presence when building
+  // the OpenAI client so a misconfigured worker fails fast at startup
+  // rather than mid-pipeline.
+  OPENAI_API_KEY: z.string().optional(),
+
+  // Temp directory override for the worker. Defaults to the OS tmpdir.
+  WORKER_TEMP_DIR: z.string().optional(),
 });
 
 export type ServerEnv = z.infer<typeof serverEnvSchema>;

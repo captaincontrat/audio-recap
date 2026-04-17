@@ -66,6 +66,29 @@ export default defineConfig({
         "lib/server/workspaces/invitation-archive-effect.ts",
         "lib/server/workspaces/bootstrap.ts",
         "lib/server/workspaces/index.ts",
+        // Meeting-import-processing modules that touch the Drizzle
+        // client, BullMQ queue, or S3 transient store. Pure decision
+        // logic (submission decisions, retry policy, stage plan,
+        // plan-token signing, status view projection, id generation,
+        // error classes, HTTP status mapping) lives in sibling modules
+        // that are unit-tested directly; the DB-/queue-/storage-touching
+        // surface here is exercised through e2e tests covering the
+        // submission → worker → status pipeline.
+        "lib/server/meetings/acceptance.ts",
+        "lib/server/meetings/normalization-policy.ts",
+        "lib/server/meetings/status-read.ts",
+        "lib/server/meetings/transcripts.ts",
+        "lib/server/meetings/index.ts",
+        "lib/server/storage/download.ts",
+        // Client-side submission orchestration hits `fetch`, browser
+        // upload, and the presigned URL flow end-to-end. It is covered
+        // by the Playwright submission e2e rather than jsdom unit
+        // coverage. The sibling `media-normalization.ts` abstraction is
+        // also excluded because its current placeholder path only
+        // reports `unavailable` — the branching lives behind the
+        // ffmpeg.wasm integration that lands in a later change.
+        "lib/client/meeting-submission.ts",
+        "lib/client/media-normalization.ts",
         "instrumentation.ts",
         // Next.js pages and route handlers are covered by Playwright
         // end-to-end tests. They are thin view layers that wire imported

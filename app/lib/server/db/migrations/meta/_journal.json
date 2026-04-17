@@ -29,6 +29,13 @@
       "when": 1776463825694,
       "tag": "0003_add_workspace_invitations",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1776466303588,
+      "tag": "0004_add_web_meeting_processing",
+      "breakpoints": true
     }
   ]
 }
