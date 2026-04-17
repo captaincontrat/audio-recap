@@ -1,19 +1,27 @@
 ## ADDED Requirements
 
-### Requirement: Verified authenticated users can submit one meeting media file with optional notes
-The system SHALL allow a verified authenticated user to submit exactly one audio or video file for processing. The submission flow SHALL also allow optional meeting notes captured at submission time as plain text or markdown text. The system MUST reject unauthenticated or unverified requests, MUST reject submissions whose media cannot be validated as supported audio/video input, and MUST reject submissions that exceed configured upload limits before enqueueing background work.
+### Requirement: Verified authenticated users with transcript-creation access can submit one meeting media file with optional notes in the current workspace
+The system SHALL allow a verified authenticated user to submit exactly one audio or video file for processing in the current workspace when that user has transcript-creation access there. For workspace-scoped private submission and status surfaces, the current workspace SHALL be resolved from the explicit workspace route context defined by `add-workspace-foundation`, and session or remembered workspace state MUST NOT override that explicit route context. The submission flow SHALL also allow optional meeting notes captured at submission time as plain text or markdown text. `add-workspace-archival-lifecycle` owns the rule that archived workspaces are inactive for collaboration, and this submission surface MUST honor that active-workspace requirement. The system MUST reject unauthenticated or unverified requests, MUST reject submissions from users who do not have transcript-creation access in the current workspace, MUST reject submissions whose media cannot be validated as supported audio/video input, and MUST reject submissions that exceed configured upload limits before enqueueing background work.
 
 #### Scenario: Successful submission with optional notes
-- **WHEN** a verified authenticated user submits one valid audio or video file with notes text
-- **THEN** the system creates a transcript record, stores the media and notes as transient processing inputs, creates a queued processing job, and returns the transcript identifier and initial processing status
+- **WHEN** a verified authenticated user with transcript-creation access submits one valid audio or video file with notes text in the current workspace
+- **THEN** the system creates a workspace-owned transcript record with creator attribution, stores the media and notes as transient processing inputs, creates a queued processing job, and returns the transcript identifier and initial processing status
 
 #### Scenario: Successful submission without notes
-- **WHEN** a verified authenticated user submits one valid audio or video file without notes text
-- **THEN** the system creates a transcript record and queued processing job without requiring notes
+- **WHEN** a verified authenticated user with transcript-creation access submits one valid audio or video file without notes text in the current workspace
+- **THEN** the system creates a workspace-owned transcript record and queued processing job without requiring notes
+
+#### Scenario: Submission is rejected for a read-only workspace member
+- **WHEN** a verified authenticated user with only read access in the current workspace attempts to submit meeting media
+- **THEN** the system rejects the request and does not create a transcript record or queued processing job
 
 #### Scenario: Submission is rejected before queueing
-- **WHEN** a user submits an unreadable, unsupported, or oversized media file
+- **WHEN** a user with transcript-creation access submits an unreadable, unsupported, or oversized media file
 - **THEN** the system rejects the request without creating queued background work
+
+#### Scenario: Submission is rejected for an archived workspace
+- **WHEN** a verified authenticated user with transcript-creation access attempts to submit meeting media in a current workspace that is archived
+- **THEN** the system rejects the request and does not create a transcript record or queued processing job
 
 ### Requirement: Media normalization policy is database-backed and governs submission intake
 The system SHALL store a Postgres-backed `mediaNormalizationPolicy` setting with allowed values `optional` and `required`. The submission flow SHALL read the current policy from the database before upload intake and SHALL snapshot that policy onto each accepted submission so later policy changes affect only new submissions.
@@ -45,12 +53,20 @@ The submission flow SHALL use browser-side normalization before upload handoff. 
 - **WHEN** browser-side normalization is unavailable, unsupported for the selected media, or fails while the current policy is `required`
 - **THEN** the system rejects the submission before queueing and does not upload the original file as a fallback
 
-### Requirement: Meeting processing runs asynchronously with visible status stages
-The system SHALL process accepted submissions asynchronously rather than inside the upload request. Each transcript record SHALL expose a user-visible processing status that reflects the current lifecycle stage. The status model MUST support `queued`, `preprocessing`, `transcribing`, `generating_recap`, `generating_title`, `finalizing`, `retrying`, `completed`, and `failed`.
+### Requirement: Meeting processing runs asynchronously with visible status stages through a narrow post-submit status surface
+The system SHALL process accepted submissions asynchronously rather than inside the upload request. Each transcript record SHALL expose a user-visible processing status that reflects the current lifecycle stage through a narrow workspace-scoped status surface tied to that transcript's current workspace. This requirement covers only the post-submit status behavior needed to follow accepted work and does not define the durable transcript library/detail read contract, which is owned by `add-transcript-management`. `add-workspace-archival-lifecycle` owns the rule that archived workspaces are inactive for collaboration, and this narrow status surface MUST honor that active-workspace requirement. The status model MUST support `queued`, `preprocessing`, `transcribing`, `generating_recap`, `generating_title`, `finalizing`, `retrying`, `completed`, and `failed`.
 
 #### Scenario: User checks an in-progress transcript
-- **WHEN** a user requests the status of a transcript whose job is still running
+- **WHEN** a user with read access in the transcript's current workspace requests the post-submit status of a transcript whose job is still running
 - **THEN** the system returns the transcript record with its current processing status and without completed markdown fields
+
+#### Scenario: Status read stays scoped to the transcript workspace
+- **WHEN** a user requests post-submit status for a transcript outside the current workspace or without read access there
+- **THEN** the system does not expose the transcript status through this surface
+
+#### Scenario: Status read is refused for an archived workspace
+- **WHEN** a user requests post-submit status for a transcript whose current workspace is archived
+- **THEN** the system refuses active workspace-private access for that archived workspace
 
 #### Scenario: Processing reaches completion
 - **WHEN** the worker finishes transcript generation, recap generation, title generation, persistence, and cleanup

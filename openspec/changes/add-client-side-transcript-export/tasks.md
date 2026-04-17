@@ -7,11 +7,11 @@
 
 ## 2. Authenticated Export UX
 
-- [ ] 2.1 Add owner-scoped export actions to authenticated transcript-management surfaces for completed transcripts only.
+- [ ] 2.1 Add workspace-scoped export actions to authenticated transcript-management surfaces for completed transcripts with read access, including `read_only`, only while the workspace is active under `add-workspace-archival-lifecycle`.
 - [ ] 2.2 Ensure export actions consume canonical backend markdown rather than backend-generated files or HTML payloads.
 - [ ] 2.3 Add download naming based on the current display title and selected export format.
 
 ## 3. Regression Coverage
 
-- [ ] 3.1 Add automated coverage for authenticated export authorization, completed-only export gating, and public-page absence of export controls.
+- [ ] 3.1 Add automated coverage for workspace-scoped export authorization, `read_only` export access, completed-only export gating, archive-state export refusal, and public-page absence of export controls.
 - [ ] 3.2 Add automated coverage for client-side export assembly and conversion across `md`, `txt`, `pdf`, and `docx`, including the selected `remark`-based export pipeline.

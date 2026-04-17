@@ -2,9 +2,11 @@
 
 The previous changes established the prerequisite layers for transcript export:
 
-- `bootstrap-meeting-recap-web-platform` defined the authenticated browser/API/worker topology and owner-scoped product model.
+- `bootstrap-meeting-recap-web-platform` defined the authenticated browser/API/worker topology.
 - `add-web-meeting-processing` made the transcript record the durable product resource with canonical markdown fields and privacy-safe metadata.
-- `add-transcript-management` added owner-scoped library and detail surfaces and kept transcript/recap editing markdown-first.
+- The workspace collaboration direction now makes transcript access workspace-scoped by membership role rather than single-user scoping.
+- `add-transcript-management` is being retargeted to workspace-scoped library and detail surfaces and kept transcript/recap editing markdown-first.
+- `add-workspace-archival-lifecycle` makes archived workspaces unavailable for private transcript surfaces and authenticated export until the workspace is active again.
 
 This change completes the remaining authenticated export part of the brief:
 
@@ -16,32 +18,35 @@ Because earlier changes already established canonical `transcriptMarkdown` and `
 
 **Goals:**
 
-- Define authenticated export actions for owned transcripts in `md`, `txt`, `pdf`, and `docx`.
+- Define authenticated export actions for workspace-readable transcripts in active workspaces in `md`, `txt`, `pdf`, and `docx`.
 - Preserve the markdown-first backend-to-frontend contract for all export paths.
 - Define one assembled export document order: display title, recap section, transcript section.
-- Keep export actions owner-scoped and completed-only.
+- Keep export actions workspace-scoped, read-access-based, completed-only, and limited to active workspaces.
 - Keep public share pages read-only and free of export controls.
 
 **Non-Goals:**
 
 - Changing transcript creation, retention, or management rules outside what export needs.
 - Allowing public export from share links.
+- Redefining archive-driven availability of private transcript surfaces or export.
 - Moving export generation to the backend.
 - Introducing HTML as a persisted backend representation.
 - Redefining public-sharing URL behavior, secret rotation, or invalid-link handling.
 
 ## Decisions
 
-### Decision: Exports are authenticated owner actions and are only available for completed transcripts
+### Decision: Exports are authenticated workspace read actions in active workspaces and are only available for completed transcripts
 
-Exports are owner-scoped actions available from authenticated transcript-management surfaces. Only the owner of a `completed` transcript can export it. Public share pages do not offer export controls.
+Exports are workspace-scoped read actions available from authenticated transcript-management surfaces in active workspaces. Any current workspace user with read access to a `completed` transcript, including `read_only`, can export it while the workspace is active. Users without transcript read access receive the same not-found/unavailable behavior used for other workspace-scoped transcript reads. `add-workspace-archival-lifecycle` defines when archival makes those private transcript surfaces and export unavailable. Public share pages do not offer export controls.
 
-This aligns export with private transcript ownership and avoids supporting partially generated or failed content as downloadable artifacts.
+This aligns export with workspace-scoped transcripts and keeps read access rules consistent across library, detail, and export flows without turning export into a creator-only permission.
 
 **Why this over alternatives**
 
 - Over allowing public export from shared links: the request only requires authenticated export actions and public sharing should stay read-only and minimal.
+- Over limiting export to `member` and `admin`: export is a read action and `read_only` already has transcript read access.
 - Over allowing export before completion: the durable content may be incomplete or absent.
+- Over allowing export while a workspace is archived: archive is a total lockout for private transcript surfaces and authenticated export under `add-workspace-archival-lifecycle`.
 
 ### Decision: Export conversion happens entirely on the frontend from canonical markdown
 
@@ -85,7 +90,7 @@ Implementation references for the selected export stack:
 
 ### Decision: Public share pages do not expose export actions
 
-Export remains an authenticated owner action even after public sharing exists. A visitor viewing a public share page sees only the read-only shared transcript view and does not gain export affordances through that route.
+Export remains an authenticated workspace read action even after public sharing exists. A visitor viewing a public share page sees only the read-only shared transcript view and does not gain export affordances through that route.
 
 This keeps the public surface privacy-minimal and prevents export controls from leaking onto a route that is intentionally separate from authenticated transcript-management behavior.
 
@@ -111,10 +116,10 @@ This gives users friendly download names without coupling export identity to hid
 
 ## Migration Plan
 
-1. Add owner-scoped export entry points to transcript-management surfaces for completed transcripts.
+1. Add workspace-scoped export entry points to active transcript-management surfaces for completed transcripts that the current membership can read.
 2. Implement frontend export helpers that assemble canonical markdown into one document and run it through the selected `unified` / `remark` pipeline.
 3. Add format-specific conversion, title-derived download naming, and client-side error handling.
-4. Add automated coverage for export authorization, public-route non-exposure, and format conversion outputs.
+4. Add automated coverage for workspace-scoped export authorization, archive-state refusal, public-route non-exposure, and format conversion outputs.
 
 ## Open Questions
 

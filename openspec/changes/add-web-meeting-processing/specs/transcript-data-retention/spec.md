@@ -1,15 +1,19 @@
 ## ADDED Requirements
 
 ### Requirement: The transcript record is the durable product resource
-The system SHALL treat the transcript record as the durable resource created by a meeting submission. Each transcript record MUST belong to one user and MUST persist the canonical content fields `transcriptMarkdown` and `recapMarkdown` when processing completes successfully. Each transcript record MUST also persist the privacy-safe metadata needed for consultation and future management: processing status, title, source media kind, original media duration, submitted-with-notes flag, and lifecycle timestamps.
+The system SHALL treat the transcript record as the durable resource created by a meeting submission. Each transcript record MUST belong to one workspace and MUST persist `workspaceId` plus creator attribution. While the creating account exists, that creator attribution MUST include `createdByUserId`. Each transcript record MUST persist the canonical content fields `transcriptMarkdown` and `recapMarkdown` when processing completes successfully. Each transcript record MUST also persist the privacy-safe metadata needed for consultation and future management: processing status, title, source media kind, original media duration, submitted-with-notes flag, and lifecycle timestamps.
 
 #### Scenario: Submission creates a durable transcript record before processing completes
-- **WHEN** a verified authenticated user submits valid meeting media
-- **THEN** the system creates a transcript record in a non-terminal processing state even before canonical markdown fields have been filled
+- **WHEN** a verified authenticated user with transcript-creation access submits valid meeting media in the current workspace
+- **THEN** the system creates a transcript record for that workspace in a non-terminal processing state even before canonical markdown fields have been filled
 
 #### Scenario: Completed transcript persists canonical markdown fields
 - **WHEN** processing completes successfully
-- **THEN** the transcript record persists canonical `transcriptMarkdown`, canonical `recapMarkdown`, and the generated title as durable content
+- **THEN** the transcript record persists `workspaceId`, `createdByUserId`, canonical `transcriptMarkdown`, canonical `recapMarkdown`, and the generated title as durable content
+
+#### Scenario: Creator account is permanently deleted later
+- **WHEN** a workspace-owned transcript survives while the account that originally created it is permanently deleted later by account-lifecycle rules
+- **THEN** the transcript remains under the same workspace ownership boundary even if `createdByUserId` is later cleared
 
 ### Requirement: Durable transcript records store only privacy-safe metadata
 The system MUST minimize long-term retained metadata to what is needed to consult and manage transcript records. The durable transcript record MUST NOT persist original filenames, local filesystem paths, transient blob references, raw meeting notes, raw source media, or raw provider payloads. Terminal failures MAY persist only a generic failure code and a generic failure summary suitable for user display.

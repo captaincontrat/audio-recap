@@ -19,13 +19,13 @@ The system SHALL allow an authenticated user to opt into two-factor authenticati
 - **WHEN** a user successfully completes second-factor verification and chooses to trust the current device
 - **THEN** the system remembers that device for the trust window and skips the second-factor prompt on later sign-ins during that window
 
-### Requirement: Users can permanently delete their account
-The system SHALL allow an authenticated user to permanently delete their account after recent authentication and explicit confirmation. Account deletion MUST revoke all sessions, delete password and Google credentials, remove enrolled passkeys and two-factor secrets or recovery material, and enqueue deletion of owned application data defined by later capabilities.
+### Requirement: Sensitive auth-management actions require recent authentication
+The system SHALL require recent authentication before an authenticated user can perform security-sensitive auth-management actions. These actions MUST include two-factor management actions that materially change second-factor or recovery state, even if the user still has an otherwise valid session. Account closure or deactivation, including the 30-day self-service reactivation window, is out of scope for this capability and is specified by `add-account-closure-retention`.
 
-#### Scenario: Recently authenticated user confirms account deletion
-- **WHEN** a recently authenticated user explicitly confirms permanent account deletion
-- **THEN** the system deletes the account credentials, revokes all sessions, enqueues owned-data deletion, and signs the user out
+#### Scenario: Recently authenticated user performs a sensitive auth-management action
+- **WHEN** a recently authenticated user attempts a security-sensitive auth-management action that changes second-factor or recovery state
+- **THEN** the system allows the action without requiring an additional re-authentication prompt
 
-#### Scenario: User attempts account deletion without recent authentication
-- **WHEN** an authenticated user tries to delete the account without a recent authentication check
-- **THEN** the system requires re-authentication before allowing permanent deletion
+#### Scenario: User attempts a sensitive auth-management action without recent authentication
+- **WHEN** an authenticated user tries to perform a security-sensitive auth-management action without a recent authentication check
+- **THEN** the system requires re-authentication before allowing the action

@@ -1,61 +1,81 @@
 ## Context
 
-The earlier changes established three foundations:
+The earlier changes established the key foundations:
 
-- `bootstrap-meeting-recap-web-platform` defined the authenticated browser/API/worker topology, Postgres as the durable source of truth, Redis for async coordination, and owner-scoped account rules.
-- `add-web-meeting-processing` defined transcript creation from uploaded media, canonical markdown persistence, privacy-safe retained metadata, and the transcript record as the long-lived resource.
-- The repository still has only a placeholder `app/` UI, so transcript management now needs to define the first private post-processing product surfaces: a library of transcript records and a detail page for one owned record.
+- `bootstrap-meeting-recap-web-platform` defined the authenticated browser/API/worker topology, Postgres as the durable source of truth, and Redis for async coordination.
+- `add-workspace-foundation` defined workspaces, membership roles, and the current-workspace contract for authenticated product surfaces.
+- `add-web-meeting-processing` defined workspace-owned transcript creation from uploaded media, canonical markdown persistence, privacy-safe retained metadata, and the transcript record as the long-lived resource.
 
-This reduced change builds on the durable transcript record from processing. It does not redefine write-side transcript curation, public sharing, or export. Instead, it defines the minimum private library and detail foundation that later follow-up changes can build on.
+The repository still has only a placeholder `app/` UI, so transcript management now needs to define the first private post-processing product surfaces: a library of transcript records and a detail page for one transcript in the current workspace.
+
+This reduced change builds on the durable workspace-owned transcript record from processing. It does not redefine write-side transcript curation, public sharing, export, or workspace-selection UX. Instead, it is the unique owner of the durable private transcript library/detail read surface that later follow-up changes can build on.
 
 ## Goals / Non-Goals
 
 **Goals:**
 
-- Define the authenticated private transcript library and transcript detail page.
-- Define ownership and authorization rules for listing and reading transcript records.
+- Define the authenticated private transcript library and transcript detail page for the current workspace.
+- Define `displayTitle` as the stable read-side title field used by transcript library and detail surfaces.
+- Define workspace membership and authorization rules for listing and reading transcript records.
 - Keep the backend-to-frontend contract markdown-first for transcript and recap content.
-- Define server-side search, baseline sort, status filtering, cursor pagination, and explicit "Load more" behavior for the private library.
+- Define server-side search, baseline `displayTitle`/time sort, status filtering, cursor pagination, and explicit "Load more" behavior for the private library in the current workspace.
 - Define empty, loading, no-results, not-found, and recoverable error states for the library and detail surfaces.
 
 **Non-Goals:**
 
-- Custom title overrides or generated-vs-custom title rules.
+- Write-side title inputs or calculation rules such as `customTitle ?? title`; this change only owns the stable read-side `displayTitle` contract that consumes the effective title.
 - Tag management, important markers, or metadata-heavy organization controls.
 - Transcript or recap markdown editing.
 - Delete confirmation or destructive transcript removal.
 - Public sharing URLs and share management.
 - Export formats or frontend conversion from markdown.
+- Workspace invitation flows, active-workspace selection UX, cross-workspace transcript browsing, or archive policy beyond consuming the active-workspace gate from `add-workspace-archival-lifecycle`.
 - Changes to transcript generation, privacy retention, or background processing behavior beyond what read-only transcript browsing needs.
 - Rich text or WYSIWYG storage formats.
 
 ## Decisions
 
-### Decision: Build two primary read-first surfaces - library and detail
+### Decision: Build two primary read-first surfaces - library and detail within the current workspace
 
 The product surface for this change is:
 
 - a library page for browsing many transcript records
-- a detail page for viewing one owned record
+- a detail page for viewing one transcript record in the current workspace
 
 The library returns summary data only:
 
 - transcript identifier
-- durable title from processing
+- `displayTitle`
 - processing status
 - created and updated timestamps
 - optional short recap preview derived from canonical markdown
 
-The detail page returns the full owned transcript record, including canonical `transcriptMarkdown` and `recapMarkdown` when they exist.
+The detail page returns the full transcript record visible in the current workspace, including `displayTitle` plus canonical `transcriptMarkdown` and `recapMarkdown` when they exist.
 
 **Why this over alternatives**
 
 - Over loading full markdown for every library item: that would make the list heavier, slower, and harder to paginate.
 - Over merging everything into one page: the library and detail views have different query and UX needs.
 
+### Decision: Expose `displayTitle` as the stable read-side title contract
+
+The durable library and detail surfaces owned by this change expose `displayTitle` rather than exposing callers directly to whichever title input currently wins. `displayTitle` is the field used for library cards, detail headers, baseline title search, and baseline title sorting.
+
+Contract rules:
+
+- before transcript curation lands, `displayTitle` equals the processing-owned `title`
+- after `add-transcript-curation-controls` lands, this read surface continues to expose `displayTitle` while consuming that change's effective-title calculation rule `customTitle ?? title`
+
+This keeps the read contract stable even as later write-side curation behavior evolves.
+
+**Why this over alternatives**
+
+- Over exposing raw `title` now and changing the read contract later: that would force avoidable API and UI churn once custom rename behavior lands.
+- Over letting transcript curation own the read-side title field: the durable library/detail surfaces should own the contract they render.
+
 ### Decision: Keep the read contract markdown-first end to end
 
-The backend remains the source of truth for canonical transcript content in markdown. The detail read surface returns markdown strings and the frontend renders markdown for reading.
+The backend remains the source of truth for canonical transcript content in markdown. The detail read surface returns `displayTitle` plus markdown strings for the current-workspace transcript record and the frontend renders markdown for reading.
 
 The system will not switch to HTML as the persisted contract for transcript or recap content.
 
@@ -70,12 +90,12 @@ This means:
 - Over persisting HTML: it would fight the export-first roadmap, add sanitization/storage complexity, and break the repo's established markdown-centric data model.
 - Over blocking transcript viewing until a richer editor exists: users need read access before curation tooling is added.
 
-### Decision: Search, sort, and filtering are server-side but scoped to read-first controls
+### Decision: Search, sort, and filtering are server-side but scoped to the current workspace
 
-The transcript library must remain correct under pagination and ownership enforcement, so search, sort, and filtering will happen on the server. The library query supports:
+The transcript library must remain correct under pagination and workspace membership enforcement, so search, sort, and filtering will happen on the server. The library query supports:
 
-- full-text query across title, transcript content, and recap content
-- sort options for newest first, oldest first, recently updated, title A-Z, and title Z-A
+- full-text query across effective `displayTitle`, transcript content, and recap content
+- sort options for newest first, oldest first, recently updated, `displayTitle` A-Z, and `displayTitle` Z-A
 - filtering by processing status
 
 To keep the persisted content markdown-first without making search quality poor, the backend may derive an internal search document from stripped markdown text. That internal search representation is not a user-facing content contract.
@@ -84,7 +104,7 @@ This reduced change intentionally does not include tag-based or important-state 
 
 **Why this over alternatives**
 
-- Over client-side filtering of all records: it would not scale and would undermine owner-scoped pagination.
+- Over client-side filtering of all records: it would not scale and would undermine workspace-scoped pagination and access control.
 - Over searching raw markdown only: markdown syntax noise would reduce search quality.
 - Over leaving all organization controls for the follow-up: users still need baseline discovery tools in the first private library release.
 
@@ -106,22 +126,25 @@ This change explicitly does not use infinite scroll.
 - Over numbered pages: cursor pagination is more stable as records change and better fits timeline-style transcript libraries.
 - Over infinite scroll: explicit load more is simpler, more accessible, and easier to combine with loading and error states.
 
-### Decision: Enforce ownership by scoping every query to the current user and hiding non-owned records
+### Decision: Enforce reads by current workspace membership and hide records outside the current workspace
 
-Every transcript-management operation in this reduced change is scoped by `ownerUserId`. A user can only list or load transcript records they own. Direct access to another user's transcript identifier returns the same not-found behavior as a missing transcript so the system does not reveal record existence across accounts.
+Every transcript-management operation in this reduced change is scoped by `workspaceId` resolved from the current-workspace contract in `add-workspace-foundation`. For workspace-scoped private library and detail routes, the explicit workspace route context is authoritative; session or remembered state may help choose a default entry route when no workspace is explicit, but must not override the route-selected workspace. A user with read access in the current workspace (`read_only`, `member`, or `admin`) can list or load transcript records in that workspace. `add-workspace-archival-lifecycle` owns the rule that archived workspaces are inactive for collaboration, so these library/detail surfaces depend on that active-workspace gate rather than redefining archive policy. Direct access to a transcript identifier outside the current workspace returns the same not-found behavior as a missing transcript so the system does not reveal record existence across workspaces.
 
-This ownership model applies only to authenticated private transcript records. Future public share routes remain out of scope here.
+This current-workspace scoping applies only to authenticated private transcript records. Future public share routes and broader cross-workspace navigation remain out of scope here.
 
 **Why this over alternatives**
 
+- Over scoping reads to the record creator: that would break the workspace-owned transcript library model.
+- Over aggregating records across every workspace the user belongs to: this change defines a current-workspace library, not a global cross-workspace search surface.
 - Over returning explicit forbidden errors for known foreign records: hiding existence is a safer default for private resources.
+- Over keeping archived workspaces browseable in read-only mode: archived workspaces are inactive for collaboration under `add-workspace-archival-lifecycle`.
 
 ### Decision: Define explicit UI states for library and detail
 
 The UI must distinguish between:
 
 - initial loading
-- library empty state when the user owns no transcripts
+- library empty state when the current workspace has no transcripts visible to the user
 - no-results state when search or status filters match nothing
 - recoverable library fetch error with retry
 - detail loading
@@ -139,15 +162,16 @@ This prevents the common mistake of collapsing "nothing here" and "we failed to 
 - [Full-text search over transcript content can become expensive] -> Use server-side search indexes derived from markdown content and keep list responses summary-only.
 - [Cursor pagination gets trickier with multiple sort modes] -> Encode sort-specific boundaries in the cursor and reset cursors whenever query controls change.
 - [A read-first split can leave later curation work feeling separate from the initial library] -> Keep the reduced list/detail contract stable so follow-up curation controls can layer onto the same surfaces instead of replacing them.
-- [Hiding foreign records as not-found can make internal debugging harder] -> Keep structured server logs for authorization failures without exposing record existence to users.
+- [This change depends on shared current-workspace resolution and archive gating] -> Reuse `add-workspace-foundation` for current-workspace resolution and `add-workspace-archival-lifecycle` for active-workspace lockout instead of redefining either rule inside transcript management.
+- [Hiding out-of-workspace records as not-found can make internal debugging harder] -> Keep structured server logs for authorization failures without exposing record existence to users.
 
 ## Migration Plan
 
-1. Extend transcript query support and any supporting indexes needed for owner-scoped search, baseline sorting, status filtering, and cursor pagination.
-2. Add server-side transcript list and detail read surfaces with owner scoping.
-3. Build the transcript library UI with search, baseline sort, status filter, load-more pagination, and explicit empty/loading/error states.
-4. Build the transcript detail UI with canonical markdown rendering plus status and privacy-safe metadata.
-5. Add authorization and regression coverage for owner-only access and list-query behavior.
+1. Extend transcript query support and any supporting indexes needed for workspace-scoped search, baseline `displayTitle`/time sorting, status filtering, and cursor pagination, using the current-workspace contract from `add-workspace-foundation`.
+2. Add server-side transcript list and detail read surfaces with current-workspace and read-access scoping plus the stable `displayTitle` read contract.
+3. Build the transcript library UI with search, baseline `displayTitle`/time sort, status filter, load-more pagination, and explicit empty/loading/error states for the current workspace.
+4. Build the transcript detail UI with `displayTitle`, canonical markdown rendering, status, and privacy-safe metadata.
+5. Add authorization and regression coverage for active-workspace lockout, workspace-scoped access, and list-query behavior.
 
 Rollback strategy:
 
@@ -157,4 +181,4 @@ Rollback strategy:
 
 ## Open Questions
 
-None are blocking for this reduced change. Rename, markdown editing, tags, important markers, and delete flows move to a follow-up transcript-curation change.
+None are blocking for this reduced change. Active-workspace UX stays with `add-workspace-foundation` or later workspace changes, while rename, markdown editing, tags, important markers, and delete flows move to a follow-up transcript-curation change.
