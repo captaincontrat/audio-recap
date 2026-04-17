@@ -24,7 +24,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1032.0",
     "@aws-sdk/client-sesv2": "^3.1032.0",
+    "@aws-sdk/s3-request-presigner": "^3.1032.0",
     "@hookform/resolvers": "^5.2.2",
     "@node-rs/argon2": "^2.0.2",
     "@remixicon/react": "^4.9.0",

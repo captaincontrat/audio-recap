@@ -289,10 +289,11 @@ describe("cli entrypoint", () => {
       expect.anything(),
       expect.objectContaining({
         meetingNotes: "",
-        notesPath: undefined,
-        outputLanguage: undefined,
       }),
     );
+    const summaryCallArgs = cliMocks.generateMeetingSummary.mock.calls[0][1] as Record<string, unknown>;
+    expect("notesPath" in summaryCallArgs).toBe(false);
+    expect("outputLanguage" in summaryCallArgs).toBe(false);
     expect(cliMocks.rm).toHaveBeenCalledWith("/tmp/audio-recap-temp", {
       recursive: true,
       force: true,
@@ -324,5 +325,22 @@ describe("cli entrypoint", () => {
 
     expect(errorSpy).toHaveBeenCalledWith("Missing OPENAI_API_KEY in the environment.");
     expect(process.exitCode).toBe(1);
+  });
+
+  it("logs each known pipeline stage and refuses unknown ones", async () => {
+    const cli = await importCliModule();
+    const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+
+    cli.logPipelineStage("prepare-audio");
+    cli.logPipelineStage("transcribe", { chunkCount: 3 });
+    cli.logPipelineStage("transcribe");
+    cli.logPipelineStage("build-transcript", { segmentCount: 4 });
+    cli.logPipelineStage("generate-summary");
+
+    expect(logSpy).toHaveBeenCalledWith("Preparing audio with ffmpeg...");
+    expect(logSpy).toHaveBeenCalledWith("Transcribing 3 chunk(s) with gpt-4o-transcribe-diarize...");
+    expect(logSpy).toHaveBeenCalledWith("Transcribing ? chunk(s) with gpt-4o-transcribe-diarize...");
+    expect(logSpy).toHaveBeenCalledWith("Generating summary with gpt-5.4 (reasoning high)...");
+    expect(() => cli.logPipelineStage("unknown-stage" as never)).toThrow(/Unhandled pipeline stage/);
   });
 });

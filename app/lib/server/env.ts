@@ -19,6 +19,28 @@ const serverEnvSchema = z.object({
   AWS_ACCESS_KEY_ID: z.string().optional(),
   AWS_SECRET_ACCESS_KEY: z.string().optional(),
 
+  STORAGE_TRANSIENT_BUCKET: z.string().min(1).default("summitdown-transient-dev"),
+  STORAGE_ENDPOINT: z.string().url().optional(),
+  STORAGE_REGION: z.string().optional(),
+  STORAGE_ACCESS_KEY_ID: z.string().optional(),
+  STORAGE_SECRET_ACCESS_KEY: z.string().optional(),
+  STORAGE_FORCE_PATH_STYLE: z
+    .enum(["true", "false"])
+    .optional()
+    .transform((value) => value === "true"),
+  STORAGE_PRESIGNED_PUT_TTL_SECONDS: z.coerce.number().int().positive().max(3600).default(900),
+  STORAGE_ALLOWED_ORIGINS: z
+    .string()
+    .optional()
+    .transform((value) =>
+      value
+        ? value
+            .split(",")
+            .map((origin) => origin.trim())
+            .filter((origin) => origin.length > 0)
+        : [],
+    ),
+
   LOG_LEVEL: z.enum(["trace", "debug", "info", "warn", "error", "fatal", "silent"]).default("info"),
 });
 

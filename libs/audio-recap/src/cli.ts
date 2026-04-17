@@ -7,10 +7,8 @@ import { parseArgs } from "node:util";
 import { config as loadDotenv } from "dotenv";
 import OpenAI from "openai";
 
-import { DEFAULT_CHUNK_OVERLAP_SEC, prepareAudioForUpload } from "./audio/ffmpeg.js";
-import { buildTranscriptArtifacts } from "./domain/transcript.js";
-import { generateMeetingSummary } from "./openai/summarize.js";
-import { transcribePreparedAudio } from "./openai/transcribe.js";
+import { DEFAULT_CHUNK_OVERLAP_SEC } from "./audio/ffmpeg.js";
+import { type MeetingPipelineStage, runMeetingPipeline } from "./pipeline/process-meeting.js";
 import { renderSummaryMarkdown, renderTranscriptMarkdown } from "./render/markdown.js";
 
 const PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -43,18 +41,22 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
   const generatedAt = new Date().toISOString();
 
   try {
-    console.log("Preparing audio with ffmpeg...");
-    const preparedAudio = await prepareAudioForUpload(resolvedAudioPath, tempDir, {
-      overlapSec: DEFAULT_CHUNK_OVERLAP_SEC,
-    });
-
     const client = new OpenAI({ apiKey });
-
-    console.log(`Transcribing ${preparedAudio.chunks.length} chunk(s) with gpt-4o-transcribe-diarize...`);
-    const transcription = await transcribePreparedAudio(client, preparedAudio, {
-      language: options.language,
-    });
-    const transcriptArtifacts = buildTranscriptArtifacts(transcription.mergedSegments);
+    const result = await runMeetingPipeline(
+      client,
+      {
+        inputKind: "original",
+        audioPath: resolvedAudioPath,
+        tempDir,
+        meetingNotes: notesContent,
+        ...(resolvedNotesPath ? { notesPath: resolvedNotesPath } : {}),
+        ...(options.language ? { outputLanguage: options.language } : {}),
+        overlapSec: DEFAULT_CHUNK_OVERLAP_SEC,
+      },
+      {
+        onStage: (stage, details) => logPipelineStage(stage, details),
+      },
+    );
 
     const transcriptOutputPath = path.join(resolvedOutDir, "transcript.md");
     await writeFile(
@@ -63,20 +65,11 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
         audioPath: resolvedAudioPath,
         notesPath: resolvedNotesPath,
         generatedAt,
-        preparedAudio,
-        segments: transcriptArtifacts.segments,
+        preparedAudio: result.preparedAudio,
+        segments: result.transcriptArtifacts.segments,
       }),
       "utf8",
     );
-
-    console.log("Generating summary with gpt-5.4 (reasoning high)...");
-    const summary = await generateMeetingSummary(client, {
-      audioPath: resolvedAudioPath,
-      notesPath: resolvedNotesPath,
-      meetingNotes: notesContent,
-      transcriptBlocks: transcriptArtifacts.blocks,
-      outputLanguage: options.language,
-    });
 
     const summaryOutputPath = path.join(resolvedOutDir, "summary.md");
     await writeFile(
@@ -85,7 +78,7 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
         audioPath: resolvedAudioPath,
         notesPath: resolvedNotesPath,
         generatedAt,
-        summary,
+        summary: result.summary,
       }),
       "utf8",
     );
@@ -216,6 +209,26 @@ export function runCliIfInvoked(moduleUrl = import.meta.url, argv: string[] = pr
   }
 
   void main(argv).catch(handleFatalError);
+}
+
+export function logPipelineStage(stage: MeetingPipelineStage, details?: Record<string, unknown>): void {
+  switch (stage) {
+    case "prepare-audio":
+      console.log("Preparing audio with ffmpeg...");
+      return;
+    case "transcribe":
+      console.log(`Transcribing ${String(details?.chunkCount ?? "?")} chunk(s) with gpt-4o-transcribe-diarize...`);
+      return;
+    case "build-transcript":
+      return;
+    case "generate-summary":
+      console.log("Generating summary with gpt-5.4 (reasoning high)...");
+      return;
+    default: {
+      const exhaustive: never = stage;
+      throw new Error(`Unhandled pipeline stage: ${String(exhaustive)}`);
+    }
+  }
 }
 
 runCliIfInvoked();

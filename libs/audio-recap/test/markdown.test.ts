@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import type { PreparedAudioFile } from "../src/audio/ffmpeg.js";
-import { renderSummaryMarkdown, renderTranscriptMarkdown } from "../src/render/markdown.js";
+import {
+  renderPrivacySafeSummaryMarkdown,
+  renderPrivacySafeTranscriptMarkdown,
+  renderSummaryMarkdown,
+  renderTranscriptMarkdown,
+} from "../src/render/markdown.js";
 
 const preparedAudio: PreparedAudioFile = {
   sourcePath: "/tmp/meeting.m4a",
@@ -81,5 +86,72 @@ describe("markdown rendering", () => {
         "",
       ].join("\n"),
     );
+  });
+
+  it("renders privacy-safe transcript markdown without paths and honors provided titles", () => {
+    const markdown = renderPrivacySafeTranscriptMarkdown({
+      title: "  Q1 kickoff\n meeting  ",
+      generatedAt: "2026-04-14T10:00:00.000Z",
+      preparedAudio,
+      segments: [
+        {
+          id: "seg-00001",
+          speaker: "Alice",
+          startSec: 0,
+          endSec: 12,
+          text: "Bonjour tout le monde.",
+          chunkIndex: 0,
+        },
+      ],
+    });
+
+    expect(markdown).toContain("# Q1 kickoff meeting");
+    expect(markdown).not.toContain("/tmp/");
+    expect(markdown).not.toContain("Audio source");
+    expect(markdown).not.toContain("Notes source");
+    expect(markdown).toContain("timeline du média soumis à l'origine");
+    expect(markdown).toContain("### 00:00:00 - 00:00:12 · Alice");
+  });
+
+  it("falls back to the default privacy-safe heading and renders empty segment fallback", () => {
+    const markdown = renderPrivacySafeTranscriptMarkdown({
+      generatedAt: "2026-04-14T10:00:00.000Z",
+      preparedAudio: {
+        speedMultiplier: 2,
+        formatName: "mp3",
+        chunks: [],
+        overlapSec: 1,
+      },
+      segments: [],
+    });
+
+    expect(markdown).toContain("# Transcript du meeting");
+    expect(markdown).toContain("Aucun segment n'a été retourné par la transcription.");
+  });
+
+  it("renders privacy-safe summary markdown with an optional title heading", () => {
+    const withTitle = renderPrivacySafeSummaryMarkdown({
+      title: "Q1 kickoff",
+      generatedAt: "2026-04-14T10:00:00.000Z",
+      summary: "\n# Ignored heading\n\n- Action 1\n",
+    });
+
+    expect(withTitle).toBe(["<!-- Generated at 2026-04-14T10:00:00.000Z with gpt-5.4 reasoning high -->", "", "# Q1 kickoff", "", "- Action 1", ""].join("\n"));
+
+    const withoutTitle = renderPrivacySafeSummaryMarkdown({
+      generatedAt: "2026-04-14T10:00:00.000Z",
+      summary: "- Action 1",
+    });
+
+    expect(withoutTitle).toBe(["<!-- Generated at 2026-04-14T10:00:00.000Z with gpt-5.4 reasoning high -->", "", "- Action 1", ""].join("\n"));
+
+    const withTitleNoHeading = renderPrivacySafeSummaryMarkdown({
+      title: "Q1 kickoff",
+      generatedAt: "2026-04-14T10:00:00.000Z",
+      summary: "- Action 1",
+    });
+
+    expect(withTitleNoHeading).toContain("# Q1 kickoff");
+    expect(withTitleNoHeading).toContain("- Action 1");
   });
 });

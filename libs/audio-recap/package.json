@@ -13,6 +13,19 @@
   },
   "license": "ISC",
   "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./pipeline": "./src/pipeline/process-meeting.ts",
+    "./audio": "./src/audio/ffmpeg.ts",
+    "./domain/transcript": "./src/domain/transcript.ts",
+    "./domain/timestamps": "./src/domain/timestamps.ts",
+    "./openai/summarize": "./src/openai/summarize.ts",
+    "./openai/title": "./src/openai/title.ts",
+    "./openai/transcribe": "./src/openai/transcribe.ts",
+    "./render": "./src/render/markdown.ts"
+  },
   "dependencies": {
     "dotenv": "^17.3.1",
     "openai": "^6.32.0"
