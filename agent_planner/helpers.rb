@@ -14,7 +14,7 @@ module AgentPlanner
   AGENT_BIN = ENV.fetch("AGENT_PLANNER_BIN", "agent")
   WORKSPACE = ENV.fetch("AGENT_PLANNER_WORKSPACE", File.expand_path("..", __dir__))
   OUTPUT_ROOT = ENV.fetch("AGENT_PLANNER_OUTPUT_ROOT", File.join(WORKSPACE, "out", "agent_planner"))
-  DEFAULT_MODEL = ENV.fetch("AGENT_PLANNER_MODEL", "gpt-5.4-xhigh-fast")
+  DEFAULT_MODEL = ENV.fetch("AGENT_PLANNER_MODEL", "claude-opus-4-7-thinking-max")
   PLAN_MODEL = ENV.fetch("AGENT_PLANNER_PLAN_MODEL", DEFAULT_MODEL)
   TRUST_WORKSPACE = ENV.fetch("AGENT_PLANNER_TRUST", "1") == "1"
   FORCE_COMMANDS = ENV.fetch("AGENT_PLANNER_FORCE", "1") == "1"
