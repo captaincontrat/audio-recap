@@ -7,6 +7,10 @@
     "format": "pnpm --filter ./app --filter ./libs/audio-recap format",
     "lint": "pnpm --filter ./app --filter ./libs/audio-recap lint",
     "process:meeting": "pnpm --filter ./libs/audio-recap process:meeting",
-    "typecheck": "pnpm --filter ./app --filter ./libs/audio-recap typecheck"
+    "typecheck": "pnpm --filter ./app --filter ./libs/audio-recap typecheck",
+    "app:dev": "pnpm --filter ./app dev",
+    "app:worker": "pnpm --filter ./app worker",
+    "app:db:generate": "pnpm --filter ./app db:generate",
+    "app:db:migrate": "pnpm --filter ./app db:migrate"
   }
 }
