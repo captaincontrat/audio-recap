@@ -65,12 +65,33 @@ export { detailReadRefusalToHttpStatus, libraryReadRefusalToHttpStatus } from ".
 export { type LibraryReadInputs, type LibraryReadResult, readTranscriptLibrary } from "./library-read";
 
 export {
+  buildSharePath,
   type TranscriptDetailView,
   type TranscriptLibraryItem,
   type TranscriptSummaryRow,
   toDetailView,
   toLibraryItem,
 } from "./projections";
+
+export {
+  canManagePublicSharing,
+  disablePublicSharing,
+  enablePublicSharing,
+  findTranscriptByPublicShareId,
+  findTranscriptForShare,
+  type PublicShareLookupView,
+  type PublicShareResolutionRefusalReason,
+  PublicShareResolutionRefusedError,
+  type PublicShareResolveInputs,
+  type PublicShareView,
+  resolvePublicShare,
+  rotatePublicShareSecret,
+  type ShareAuthorizationView,
+  type ShareManagementInputs,
+  type ShareManagementRefusalReason,
+  shareManagementRefusalToHttpStatus,
+  ShareManagementRefusedError,
+} from "./sharing";
 
 export { findTranscriptDetailForWorkspace, listTranscriptsForWorkspace } from "./queries";
 
@@ -86,6 +107,7 @@ export {
   LibraryQueryParseError,
   type LibraryQueryParseFailureReason,
   type LibraryRawQuery,
+  type LibrarySharedFilter,
   parseLibraryQueryOptions,
 } from "./query-options";
 

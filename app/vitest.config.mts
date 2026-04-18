@@ -90,6 +90,19 @@ export default defineConfig({
         "lib/server/transcripts/library-read.ts",
         "lib/server/transcripts/detail-read.ts",
         "lib/server/transcripts/index.ts",
+        // `add-public-transcript-sharing` DB-touching modules.
+        // Pure decision logic (authorization gate, error classes,
+        // HTTP status mapping, lookup validator) is unit-tested in
+        // sibling modules; the Drizzle query + workspace-resolver
+        // wiring here, including the service-layer orchestration
+        // around enable/disable/rotate and the public resolver's
+        // top-level DB lookup, is exercised through Playwright
+        // e2e flows covering share management and the public
+        // share surface.
+        "lib/server/transcripts/sharing/queries.ts",
+        "lib/server/transcripts/sharing/service.ts",
+        "lib/server/transcripts/sharing/public-resolve.ts",
+        "lib/server/transcripts/sharing/index.ts",
         // `transcript-edit-sessions` runtime modules touch Redis, the
         // Drizzle client, or the workspace-archive side-effect
         // registry. Pure decision logic (session-decisions,

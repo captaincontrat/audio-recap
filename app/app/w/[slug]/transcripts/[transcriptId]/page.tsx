@@ -2,10 +2,22 @@ import { headers } from "next/headers";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
-import { type CurationCapabilities, TranscriptDetailView, type DetailView } from "@/components/features/transcripts/transcript-detail-view";
+import {
+  type CurationCapabilities,
+  TranscriptDetailView,
+  type DetailView,
+  type ShareCapabilities,
+} from "@/components/features/transcripts/transcript-detail-view";
 import { evaluateProtectedRoute } from "@/lib/auth/guards";
 import type { WorkspaceRole } from "@/lib/server/db/schema";
-import { canPatchCuration, DetailReadRefusedError, evaluateDeleteAuthorization, readTranscriptDetailWithRole, toDetailView } from "@/lib/server/transcripts";
+import {
+  canManagePublicSharing,
+  canPatchCuration,
+  DetailReadRefusedError,
+  evaluateDeleteAuthorization,
+  readTranscriptDetailWithRole,
+  toDetailView,
+} from "@/lib/server/transcripts";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -57,6 +69,7 @@ export default async function TranscriptDetailPage({ params }: { params: Promise
 
   const canEditMarkdown = role === "admin" || role === "member";
   const curation = evaluateCurationCapabilities({ role, requestingUserId: auth.context.user.id, transcriptCreatedByUserId: createdByUserId });
+  const sharing: ShareCapabilities = { canManageSharing: canManagePublicSharing(role) };
 
   return (
     <main className="mx-auto flex min-h-svh max-w-3xl flex-col gap-6 p-6">
@@ -65,7 +78,14 @@ export default async function TranscriptDetailPage({ params }: { params: Promise
           ← All transcripts
         </Link>
       </nav>
-      <TranscriptDetailView workspaceSlug={slug} transcriptId={transcriptId} initial={initial} canEditMarkdown={canEditMarkdown} curation={curation} />
+      <TranscriptDetailView
+        workspaceSlug={slug}
+        transcriptId={transcriptId}
+        initial={initial}
+        canEditMarkdown={canEditMarkdown}
+        curation={curation}
+        sharing={sharing}
+      />
     </main>
   );
 }

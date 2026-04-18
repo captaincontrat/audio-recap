@@ -16,6 +16,14 @@ export const LIBRARY_SORT_OPTIONS = [
   "important_last",
   "tag_list_asc",
   "tag_list_desc",
+  // Public-sharing extensions (`add-public-transcript-sharing`):
+  // `shared_first` puts publicly shared rows above unshared ones;
+  // `unshared_first` flips that ordering. The composite secondary
+  // key is `createdAt DESC` / `id DESC` so both share-aware sorts
+  // keep a stable pagination tail matching the important-state
+  // pattern.
+  "shared_first",
+  "unshared_first",
 ] as const;
 
 export type LibrarySortOption = (typeof LIBRARY_SORT_OPTIONS)[number];
@@ -55,11 +63,13 @@ export function isAscendingSort(sort: LibrarySortOption): boolean {
     case "title_desc":
     case "important_first":
     case "tag_list_desc":
+    case "shared_first":
       return false;
     case "oldest_first":
     case "title_asc":
     case "important_last":
     case "tag_list_asc":
+    case "unshared_first":
       return true;
     default: {
       const exhaustive: never = sort;
@@ -73,7 +83,7 @@ export function isAscendingSort(sort: LibrarySortOption): boolean {
 // different sort modes. Composite sorts get their own tag so the
 // cursor decoder rejects, e.g., a `created_at` cursor presented with
 // an `important_first` sort.
-export type LibrarySortColumn = "created_at" | "updated_at" | "title" | "important_created" | "tag_sort_key";
+export type LibrarySortColumn = "created_at" | "updated_at" | "title" | "important_created" | "tag_sort_key" | "shared_created";
 
 export function sortColumnFor(sort: LibrarySortOption): LibrarySortColumn {
   switch (sort) {
@@ -91,6 +101,9 @@ export function sortColumnFor(sort: LibrarySortOption): LibrarySortColumn {
     case "tag_list_asc":
     case "tag_list_desc":
       return "tag_sort_key";
+    case "shared_first":
+    case "unshared_first":
+      return "shared_created";
     default: {
       const exhaustive: never = sort;
       throw new Error(`Unhandled library sort option: ${String(exhaustive)}`);

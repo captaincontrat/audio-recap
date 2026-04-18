@@ -38,6 +38,7 @@ export async function GET(request: Request, context: { params: Promise<{ slug: s
     cursor: url.searchParams.get("cursor"),
     limit: url.searchParams.get("limit"),
     important: url.searchParams.get("important"),
+    shared: url.searchParams.get("shared"),
     tags,
   };
 

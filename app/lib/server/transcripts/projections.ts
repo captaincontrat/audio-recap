@@ -23,6 +23,7 @@ export type TranscriptSummaryRow = Pick<
   | "customTitle"
   | "tags"
   | "isImportant"
+  | "isPubliclyShared"
   | "sourceMediaKind"
   | "submittedWithNotes"
   | "createdAt"
@@ -37,6 +38,14 @@ export type TranscriptLibraryItem = {
   displayTitle: string;
   tags: string[];
   isImportant: boolean;
+  // `isPubliclyShared` feeds the shared-first / unshared-first library
+  // sorts and the shared/unshared filter added by
+  // `add-public-transcript-sharing`. The library item intentionally
+  // does NOT carry the share URL or secret identifiers — the library
+  // surface never exposes share-management state beyond the enabled
+  // flag so read-only browsers cannot enumerate or leak active share
+  // links from the list view.
+  isPubliclyShared: boolean;
   sourceMediaKind: TranscriptSourceMediaKind;
   submittedWithNotes: boolean;
   createdAt: string;
@@ -56,6 +65,7 @@ export function toLibraryItem(row: TranscriptSummaryRow): TranscriptLibraryItem 
     displayTitle: deriveDisplayTitle({ title: row.title, customTitle: row.customTitle }),
     tags: row.tags,
     isImportant: row.isImportant,
+    isPubliclyShared: row.isPubliclyShared,
     sourceMediaKind: row.sourceMediaKind,
     submittedWithNotes: row.submittedWithNotes,
     createdAt: row.createdAt.toISOString(),
@@ -94,7 +104,40 @@ export type TranscriptDetailView = {
   updatedAt: string;
   completedAt: string | null;
   failure: { code: TranscriptRow["failureCode"]; summary: string | null } | null;
+  // Public sharing state from `add-public-transcript-sharing`. The
+  // detail projection carries the current enable flag plus the
+  // relative share path (`/share/<publicShareId>/<shareSecretId>`)
+  // when a link is active so the management UI can render a copyable
+  // link without a second fetch. The path is null whenever sharing is
+  // disabled or the record has never been shared so the client never
+  // serves a stale link after a disable or rotate. `shareUpdatedAt`
+  // reflects the last share-management action and is used by the UI
+  // to show "rotated just now" feedback and by the archival lifecycle
+  // to decide whether a previously-enabled link is suppressed after
+  // a restore.
+  share: {
+    isPubliclyShared: boolean;
+    publicSharePath: string | null;
+    shareUpdatedAt: string | null;
+  };
 };
+
+export type BuildSharePathArgs = {
+  publicShareId: string | null;
+  shareSecretId: string | null;
+};
+
+// Compose the relative share path from the transcript row's double
+// UUID segments. Returns `null` when either identifier is missing so
+// callers cannot accidentally emit a half-populated `/share/<id>/`
+// path. The returned path begins with `/` and carries no query string
+// — the public route owns parsing the two UUIDs.
+export function buildSharePath(args: BuildSharePathArgs): string | null {
+  if (args.publicShareId === null || args.shareSecretId === null) {
+    return null;
+  }
+  return `/share/${args.publicShareId}/${args.shareSecretId}`;
+}
 
 export function toDetailView(row: TranscriptRow): TranscriptDetailView {
   const failure = row.failureCode
@@ -103,6 +146,13 @@ export function toDetailView(row: TranscriptRow): TranscriptDetailView {
         summary: row.failureSummary,
       }
     : null;
+  // The share path is only populated when the share is currently
+  // enabled. If `isPubliclyShared` is false, we never surface the
+  // persisted `publicShareId`/`shareSecretId` pair — disabled shares
+  // keep the identifiers around so a future re-enable can reuse the
+  // stable public handle, but the detail view treats them as
+  // internal until the workspace flips the share back on.
+  const publicSharePath = row.isPubliclyShared ? buildSharePath({ publicShareId: row.publicShareId, shareSecretId: row.shareSecretId }) : null;
   return {
     id: row.id,
     workspaceId: row.workspaceId,
@@ -120,5 +170,10 @@ export function toDetailView(row: TranscriptRow): TranscriptDetailView {
     updatedAt: row.updatedAt.toISOString(),
     completedAt: row.completedAt ? row.completedAt.toISOString() : null,
     failure,
+    share: {
+      isPubliclyShared: row.isPubliclyShared,
+      publicSharePath,
+      shareUpdatedAt: row.shareUpdatedAt ? row.shareUpdatedAt.toISOString() : null,
+    },
   };
 }

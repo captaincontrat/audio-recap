@@ -66,6 +66,20 @@ describe("encodeCursor", () => {
     expect(decodeCursor(untaggedToken, "tag_list_desc")).toEqual(untagged);
   });
 
+  test("round-trips the composite shared_created cursor for both directions", () => {
+    // `${flag}|${iso}` — flag is `1` for publicly-shared rows and
+    // `0` for non-shared ones. Mirrors the important_created shape
+    // so the same paginator logic can handle both families.
+    const payload: CursorPayload = {
+      column: "shared_created",
+      value: "1|2026-04-05T10:00:00.000Z",
+      id: "transcript_shared_boundary",
+    };
+    const token = encodeCursor(payload);
+    expect(decodeCursor(token, "shared_first")).toEqual(payload);
+    expect(decodeCursor(token, "unshared_first")).toEqual(payload);
+  });
+
   test("refuses to decode a curation cursor under a mismatched sort", () => {
     const importantToken = encodeCursor({ column: "important_created", value: "1|2026-04-01T00:00:00.000Z", id: "id_imp" });
     expect(() => decodeCursor(importantToken, "newest_first")).toThrowError(/does not match the active sort/);
@@ -74,6 +88,11 @@ describe("encodeCursor", () => {
     const tagToken = encodeCursor({ column: "tag_sort_key", value: "t|alpha", id: "id_tag" });
     expect(() => decodeCursor(tagToken, "title_asc")).toThrowError(/does not match the active sort/);
     expect(() => decodeCursor(tagToken, "important_first")).toThrowError(/does not match the active sort/);
+
+    const sharedToken = encodeCursor({ column: "shared_created", value: "1|2026-04-01T00:00:00.000Z", id: "id_shared" });
+    expect(() => decodeCursor(sharedToken, "newest_first")).toThrowError(/does not match the active sort/);
+    expect(() => decodeCursor(sharedToken, "important_first")).toThrowError(/does not match the active sort/);
+    expect(() => decodeCursor(sharedToken, "tag_list_asc")).toThrowError(/does not match the active sort/);
   });
 });
 

@@ -31,6 +31,10 @@ export const LIBRARY_STATUS_FILTER_OPTIONS = [
 export const LIBRARY_MAX_TAG_FILTER_COUNT = MAX_TAG_COUNT;
 
 export type LibraryImportantFilter = boolean | null;
+// `add-public-transcript-sharing` shares the same tri-state shape
+// (`null` = no filter, `true`/`false` = restrict). Kept as a named
+// alias so call sites read as "shared filter" not "bool-or-null".
+export type LibrarySharedFilter = boolean | null;
 
 export type LibraryRawQuery = {
   search?: string | null;
@@ -44,6 +48,11 @@ export type LibraryRawQuery = {
   // (`?tags=kickoff&tags=planning`). A missing key means "no filter".
   important?: string | null;
   tags?: string | string[] | null;
+  // `add-public-transcript-sharing` adds a shared/unshared filter.
+  // Expects the string form `"true"` / `"false"`; a missing or empty
+  // value means "no filter" and any other string is rejected with
+  // `invalid_shared` so typos do not silently degrade to "all".
+  shared?: string | null;
 };
 
 export type LibraryQueryOptions = {
@@ -54,9 +63,17 @@ export type LibraryQueryOptions = {
   limit: number;
   important: LibraryImportantFilter;
   tags: string[];
+  shared: LibrarySharedFilter;
 };
 
-export type LibraryQueryParseFailureReason = "invalid_sort" | "invalid_status" | "invalid_cursor" | "invalid_limit" | "invalid_important" | "invalid_tags";
+export type LibraryQueryParseFailureReason =
+  | "invalid_sort"
+  | "invalid_status"
+  | "invalid_cursor"
+  | "invalid_limit"
+  | "invalid_important"
+  | "invalid_tags"
+  | "invalid_shared";
 
 export class LibraryQueryParseError extends Error {
   readonly code = "library_query_invalid" as const;
@@ -82,6 +99,8 @@ function defaultMessageFor(reason: LibraryQueryParseFailureReason): string {
       return "Important filter must be 'true' or 'false'";
     case "invalid_tags":
       return `Tag filter must be an array of up to ${LIBRARY_MAX_TAG_FILTER_COUNT} non-empty values`;
+    case "invalid_shared":
+      return "Shared filter must be 'true' or 'false'";
     default: {
       const exhaustive: never = reason;
       throw new Error(`Unhandled library query parse failure: ${String(exhaustive)}`);
@@ -112,6 +131,7 @@ export function parseLibraryQueryOptions(raw: LibraryRawQuery): LibraryQueryOpti
 
   const important = parseImportantFilter(raw.important ?? null);
   const tags = parseTagsFilter(raw.tags ?? null);
+  const shared = parseSharedFilter(raw.shared ?? null);
 
   return {
     search: normalizeSearch(raw.search ?? null),
@@ -121,6 +141,7 @@ export function parseLibraryQueryOptions(raw: LibraryRawQuery): LibraryQueryOpti
     limit,
     important,
     tags,
+    shared,
   };
 }
 
@@ -176,6 +197,18 @@ function parseImportantFilter(value: string | null): LibraryImportantFilter {
   if (value === "true") return true;
   if (value === "false") return false;
   throw new LibraryQueryParseError("invalid_important");
+}
+
+// Mirror of `parseImportantFilter` for the share-state filter. The
+// tri-state is "no filter" (null) / "shared only" (true) / "unshared
+// only" (false). Kept as a dedicated helper so the refusal reason
+// points to the correct parameter instead of reusing the important
+// code when the user typoed `?shared=yes`.
+function parseSharedFilter(value: string | null): LibrarySharedFilter {
+  if (value === null || value === "") return null;
+  if (value === "true") return true;
+  if (value === "false") return false;
+  throw new LibraryQueryParseError("invalid_shared");
 }
 
 // Accepts a single scalar or an array of tag strings. Each entry is

@@ -46,9 +46,13 @@ export async function listTranscriptsForWorkspace(args: ListTranscriptsForWorksp
   // filter; `tags.length === 0` skips the tag filter.
   const importantFilter = options.important === null ? undefined : eq(transcript.isImportant, options.important);
   const tagsFilter = options.tags.length === 0 ? undefined : arrayContains(transcript.tags, options.tags);
+  // `add-public-transcript-sharing` adds a shared/unshared filter:
+  // `null` skips the filter; `true` restricts to publicly shared
+  // records; `false` restricts to unshared records.
+  const sharedFilter = options.shared === null ? undefined : eq(transcript.isPubliclyShared, options.shared);
   const keysetFilter = options.cursor ? buildKeysetFilter(options.sort, options.cursor) : undefined;
 
-  const where = and(base, searchFilter, statusFilter, importantFilter, tagsFilter, keysetFilter);
+  const where = and(base, searchFilter, statusFilter, importantFilter, tagsFilter, sharedFilter, keysetFilter);
 
   const rows: TranscriptSummaryRow[] = await getDb()
     .select({
@@ -59,6 +63,7 @@ export async function listTranscriptsForWorkspace(args: ListTranscriptsForWorksp
       customTitle: transcript.customTitle,
       tags: transcript.tags,
       isImportant: transcript.isImportant,
+      isPubliclyShared: transcript.isPubliclyShared,
       sourceMediaKind: transcript.sourceMediaKind,
       submittedWithNotes: transcript.submittedWithNotes,
       createdAt: transcript.createdAt,
@@ -134,6 +139,8 @@ function buildKeysetFilter(sort: LibrarySortOption, cursor: CursorPayload) {
       return buildImportantCreatedKeysetFilter(sort, cursor);
     case "tag_sort_key":
       return buildTagSortKeysetFilter(sort, cursor);
+    case "shared_created":
+      return buildSharedCreatedKeysetFilter(sort, cursor);
     default: {
       const exhaustive: never = cursor.column;
       throw new Error(`Unhandled cursor column: ${String(exhaustive)}`);
@@ -165,6 +172,25 @@ function buildImportantCreatedKeysetFilter(sort: LibrarySortOption, cursor: Curs
   }
   // `important_last`: ascending composite, "strictly greater than".
   return sql`(${transcript.isImportant}::int, ${transcript.createdAt}, ${transcript.id}) > (${important ? 1 : 0}, ${at.toISOString()}::timestamptz, ${cursor.id})`;
+}
+
+// Symmetric to `important_created`: the composite cursor carries the
+// boundary `(sharedFlag, createdAt)` plus the trailing id as the
+// tiebreaker. `shared_first` orders shared-before-unshared and
+// recent-before-older; `unshared_first` flips to unshared-before-
+// shared and older-before-recent so the two sorts are exact
+// reverses.
+function buildSharedCreatedKeysetFilter(sort: LibrarySortOption, cursor: CursorPayload) {
+  const parsed = parseSharedCreatedCursor(cursor.value);
+  if (!parsed) {
+    throw new Error("Invalid shared_created cursor payload");
+  }
+  const { shared, createdAt } = parsed;
+  const at = new Date(createdAt);
+  if (sort === "shared_first") {
+    return sql`(${transcript.isPubliclyShared}::int, ${transcript.createdAt}, ${transcript.id}) < (${shared ? 1 : 0}, ${at.toISOString()}::timestamptz, ${cursor.id})`;
+  }
+  return sql`(${transcript.isPubliclyShared}::int, ${transcript.createdAt}, ${transcript.id}) > (${shared ? 1 : 0}, ${at.toISOString()}::timestamptz, ${cursor.id})`;
 }
 
 // Tag-list sorts need to place untagged (NULL tag_sort_key) records
@@ -234,6 +260,12 @@ function orderByFor(sort: LibrarySortOption) {
       // DESC default is NULLS-FIRST which matches "untagged before
       // tagged" per spec.
       return [desc(transcript.tagSortKey), desc(transcript.id)];
+    case "shared_first":
+      // Shared records first (desc), then most recently created,
+      // then id as the tiebreaker for stable keyset pagination.
+      return [desc(transcript.isPubliclyShared), desc(transcript.createdAt), desc(transcript.id)];
+    case "unshared_first":
+      return [asc(transcript.isPubliclyShared), asc(transcript.createdAt), asc(transcript.id)];
     default: {
       const exhaustive: never = sort;
       throw new Error(`Unhandled library sort option: ${String(exhaustive)}`);
@@ -270,6 +302,12 @@ function boundaryValueFor(sort: LibrarySortOption, row: TranscriptSummaryRow): s
       const key = buildTagSortKey(row.tags);
       return key === null ? "u|" : `t|${key}`;
     }
+    case "shared_first":
+    case "unshared_first":
+      // Composite `${flag}|${iso}` where flag is `1` or `0`. Mirrors
+      // the `important_created` payload shape so the decoder can
+      // branch on column and share the parsing pattern.
+      return `${row.isPubliclyShared ? "1" : "0"}|${row.createdAt.toISOString()}`;
     default: {
       const exhaustive: never = sort;
       throw new Error(`Unhandled library sort option: ${String(exhaustive)}`);
@@ -311,4 +349,19 @@ function parseTagSortCursor(value: string): { tagged: boolean; key: string } | n
   if (flag !== "t" && flag !== "u") return null;
   if (flag === "t" && key.length === 0) return null;
   return { tagged: flag === "t", key };
+}
+
+// Parse `${flag}|${iso}` (flag is `1` or `0`) into a typed boundary
+// pair for the shared-state composite sort. Mirrors
+// `parseImportantCreatedCursor`; kept as a separate helper so the
+// cursor column namespace (`shared_created` vs `important_created`)
+// stays strict.
+function parseSharedCreatedCursor(value: string): { shared: boolean; createdAt: string } | null {
+  const sep = value.indexOf("|");
+  if (sep < 0) return null;
+  const flag = value.slice(0, sep);
+  const createdAt = value.slice(sep + 1);
+  if (flag !== "1" && flag !== "0") return null;
+  if (createdAt.length === 0) return null;
+  return { shared: flag === "1", createdAt };
 }

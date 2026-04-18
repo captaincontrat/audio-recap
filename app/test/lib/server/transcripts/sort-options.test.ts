@@ -47,6 +47,11 @@ describe("isTitleSort", () => {
     expect(isTitleSort("tag_list_asc")).toBe(false);
     expect(isTitleSort("tag_list_desc")).toBe(false);
   });
+
+  test("leaves the shared sort modes as non-title", () => {
+    expect(isTitleSort("shared_first")).toBe(false);
+    expect(isTitleSort("unshared_first")).toBe(false);
+  });
 });
 
 describe("isAscendingSort", () => {
@@ -66,6 +71,15 @@ describe("isAscendingSort", () => {
     // Tag sorts use ASC/DESC directly on the derived sort key.
     expect(isAscendingSort("tag_list_asc")).toBe(true);
     expect(isAscendingSort("tag_list_desc")).toBe(false);
+  });
+
+  test("classifies shared sort modes by direction", () => {
+    // `shared_first` puts publicly-shared rows first via DESC on
+    // the share flag; `unshared_first` uses ASC so non-shared rows
+    // lead. Mirrors the important-sort direction convention so the
+    // composite cursor layout can be reused.
+    expect(isAscendingSort("shared_first")).toBe(false);
+    expect(isAscendingSort("unshared_first")).toBe(true);
   });
 
   test("throws for an unexpected sort mode", () => {
@@ -90,6 +104,17 @@ describe("sortColumnFor", () => {
     // tag_list_asc/desc share `tag_sort_key` for the same reason.
     expect(sortColumnFor("tag_list_asc")).toBe("tag_sort_key");
     expect(sortColumnFor("tag_list_desc")).toBe("tag_sort_key");
+  });
+
+  test("maps the shared sort modes to the composite shared_created column", () => {
+    // shared_first/unshared_first share the composite
+    // `shared_created` column for the same reason as the important
+    // variants: the cursor values are interchangeable only within
+    // the same direction family, so both modes intentionally map
+    // to the same column and let the comparator in the query
+    // module flip direction.
+    expect(sortColumnFor("shared_first")).toBe("shared_created");
+    expect(sortColumnFor("unshared_first")).toBe("shared_created");
   });
 
   test("throws for an unexpected sort mode", () => {

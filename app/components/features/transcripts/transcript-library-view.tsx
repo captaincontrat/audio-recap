@@ -12,7 +12,9 @@ import { cn } from "@/lib/utils";
 // `toLibraryItem` on the server. Kept local so the client bundle does
 // not import server-only modules. `add-transcript-curation-controls`
 // adds the `tags` / `isImportant` fields used by the card chips and
-// the tag / important filter controls.
+// the tag / important filter controls. `add-public-transcript-sharing`
+// adds the `isPubliclyShared` flag the library uses to badge shared
+// records and to drive the shared-first sort + filter controls.
 export type LibraryItem = {
   id: string;
   workspaceId: string;
@@ -20,6 +22,7 @@ export type LibraryItem = {
   displayTitle: string;
   tags: string[];
   isImportant: boolean;
+  isPubliclyShared: boolean;
   sourceMediaKind: "audio" | "video";
   submittedWithNotes: boolean;
   createdAt: string;
@@ -27,8 +30,9 @@ export type LibraryItem = {
   completedAt: string | null;
 };
 
-// Sort vocabulary extended by `add-transcript-curation-controls`.
-// Keep in lockstep with the server-side `LIBRARY_SORT_OPTIONS` union.
+// Sort vocabulary extended by `add-transcript-curation-controls` and
+// `add-public-transcript-sharing`. Keep in lockstep with the
+// server-side `LIBRARY_SORT_OPTIONS` union.
 export type LibrarySort =
   | "newest_first"
   | "oldest_first"
@@ -38,7 +42,9 @@ export type LibrarySort =
   | "important_first"
   | "important_last"
   | "tag_list_asc"
-  | "tag_list_desc";
+  | "tag_list_desc"
+  | "shared_first"
+  | "unshared_first";
 
 export type LibraryStatusFilter =
   | ""
@@ -58,6 +64,12 @@ export type LibraryStatusFilter =
 // vocabulary.
 export type LibraryImportantFilter = "" | "true" | "false";
 
+// `""` means "no filter". `"true"` / `"false"` restrict the library
+// to publicly-shared or non-shared transcripts respectively. Mirrors
+// the server-side `LibrarySharedFilter` type; the select vocabulary
+// below feeds directly into the URL query parameter the server reads.
+export type LibrarySharedFilter = "" | "true" | "false";
+
 export type InitialLibraryState = {
   items: LibraryItem[];
   nextCursor: string | null;
@@ -65,6 +77,7 @@ export type InitialLibraryState = {
   sort: LibrarySort;
   status: LibraryStatusFilter;
   important: LibraryImportantFilter;
+  shared: LibrarySharedFilter;
   tags: string[];
 };
 
@@ -90,6 +103,7 @@ export function TranscriptLibraryView({ workspaceSlug, initial }: Props) {
   const [sort, setSort] = useState<LibrarySort>(initial.sort);
   const [status, setStatus] = useState<LibraryStatusFilter>(initial.status);
   const [important, setImportant] = useState<LibraryImportantFilter>(initial.important);
+  const [shared, setShared] = useState<LibrarySharedFilter>(initial.shared);
   const [tagFilter, setTagFilter] = useState<string[]>(initial.tags);
 
   const [fetchState, setFetchState] = useState<FetchState>({ kind: "idle" });
@@ -110,8 +124,8 @@ export function TranscriptLibraryView({ workspaceSlug, initial }: Props) {
   // Signature that triggers a pagination reset. Tag filter joins the
   // sorted tag list so a different order of the same tags is a no-op.
   const fetchSignature = useMemo(
-    () => `${search}|${sort}|${status}|${important}|${[...tagFilter].sort().join(",")}`,
-    [search, sort, status, important, tagFilter],
+    () => `${search}|${sort}|${status}|${important}|${shared}|${[...tagFilter].sort().join(",")}`,
+    [search, sort, status, important, shared, tagFilter],
   );
 
   useEffect(() => {
@@ -124,7 +138,7 @@ export function TranscriptLibraryView({ workspaceSlug, initial }: Props) {
     setFetchState({ kind: "loading" });
     (async () => {
       try {
-        const page = await fetchLibraryPage({ workspaceSlug, search, sort, status, important, tags: tagFilter, cursor: null });
+        const page = await fetchLibraryPage({ workspaceSlug, search, sort, status, important, shared, tags: tagFilter, cursor: null });
         if (cancelled) return;
         setItems(page.items);
         setNextCursor(page.nextCursor);
@@ -141,13 +155,13 @@ export function TranscriptLibraryView({ workspaceSlug, initial }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [workspaceSlug, search, sort, status, important, tagFilter]);
+  }, [workspaceSlug, search, sort, status, important, shared, tagFilter]);
 
   async function handleLoadMore() {
     if (!nextCursor || fetchState.kind === "loading" || fetchState.kind === "loading_more") return;
     setFetchState({ kind: "loading_more" });
     try {
-      const page = await fetchLibraryPage({ workspaceSlug, search, sort, status, important, tags: tagFilter, cursor: nextCursor });
+      const page = await fetchLibraryPage({ workspaceSlug, search, sort, status, important, shared, tags: tagFilter, cursor: nextCursor });
       setItems((prev) => [...prev, ...page.items]);
       setNextCursor(page.nextCursor);
       setFetchState({ kind: "idle" });
@@ -177,6 +191,10 @@ export function TranscriptLibraryView({ workspaceSlug, initial }: Props) {
     setImportant(event.target.value as LibraryImportantFilter);
   }
 
+  function handleSharedChange(event: ChangeEvent<HTMLSelectElement>) {
+    setShared(event.target.value as LibrarySharedFilter);
+  }
+
   function handleTagFilterChange(next: string[]) {
     setTagFilter(next);
   }
@@ -191,7 +209,7 @@ export function TranscriptLibraryView({ workspaceSlug, initial }: Props) {
     setFetchState({ kind: "loading" });
     (async () => {
       try {
-        const page = await fetchLibraryPage({ workspaceSlug, search, sort, status, important, tags: tagFilter, cursor: null });
+        const page = await fetchLibraryPage({ workspaceSlug, search, sort, status, important, shared, tags: tagFilter, cursor: null });
         if (signature !== fetchSignature) return;
         setItems(page.items);
         setNextCursor(page.nextCursor);
@@ -206,7 +224,7 @@ export function TranscriptLibraryView({ workspaceSlug, initial }: Props) {
     })();
   }
 
-  const isSearching = search.length > 0 || status !== "" || important !== "" || tagFilter.length > 0;
+  const isSearching = search.length > 0 || status !== "" || important !== "" || shared !== "" || tagFilter.length > 0;
   const showInitialLoading = fetchState.kind === "loading" && items.length === 0;
   const showReloadError = fetchState.kind === "error" && fetchState.retry === "reload" && items.length === 0;
   const showListErrorBanner = fetchState.kind === "error" && fetchState.retry === "reload" && items.length > 0;
@@ -222,6 +240,8 @@ export function TranscriptLibraryView({ workspaceSlug, initial }: Props) {
         onStatusChange={handleStatusChange}
         important={important}
         onImportantChange={handleImportantChange}
+        shared={shared}
+        onSharedChange={handleSharedChange}
         tagFilter={tagFilter}
         onTagFilterChange={handleTagFilterChange}
         onSearchSubmit={handleSearchSubmit}
@@ -277,6 +297,8 @@ function LibraryControls({
   onStatusChange,
   important,
   onImportantChange,
+  shared,
+  onSharedChange,
   tagFilter,
   onTagFilterChange,
   onSearchSubmit,
@@ -289,6 +311,8 @@ function LibraryControls({
   onStatusChange: (event: ChangeEvent<HTMLSelectElement>) => void;
   important: LibraryImportantFilter;
   onImportantChange: (event: ChangeEvent<HTMLSelectElement>) => void;
+  shared: LibrarySharedFilter;
+  onSharedChange: (event: ChangeEvent<HTMLSelectElement>) => void;
   tagFilter: string[];
   onTagFilterChange: (next: string[]) => void;
   onSearchSubmit: (event: FormEvent<HTMLFormElement>) => void;
@@ -326,6 +350,8 @@ function LibraryControls({
             <option value="important_last">Important last</option>
             <option value="tag_list_asc">Tags A–Z</option>
             <option value="tag_list_desc">Tags Z–A</option>
+            <option value="shared_first">Shared first</option>
+            <option value="unshared_first">Unshared first</option>
           </select>
         </div>
         <div className="flex flex-col gap-2 sm:w-48">
@@ -365,6 +391,22 @@ function LibraryControls({
             <option value="">All transcripts</option>
             <option value="true">Important only</option>
             <option value="false">Not important</option>
+          </select>
+        </div>
+        <div className="flex flex-col gap-2 sm:w-48">
+          <Label htmlFor="library-shared">Shared</Label>
+          <select
+            id="library-shared"
+            value={shared}
+            onChange={onSharedChange}
+            className={cn(
+              "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            )}
+          >
+            <option value="">All transcripts</option>
+            <option value="true">Publicly shared</option>
+            <option value="false">Not shared</option>
           </select>
         </div>
       </div>
@@ -452,6 +494,7 @@ function LibraryItemCard({ item, workspaceSlug }: { item: LibraryItem; workspace
       <div className="flex flex-wrap items-start justify-between gap-2">
         <span className="text-sm font-semibold text-foreground">{item.displayTitle}</span>
         <div className="flex items-center gap-2">
+          {item.isPubliclyShared ? <SharedBadge /> : null}
           {item.isImportant ? <ImportantBadge /> : null}
           <StatusBadge status={item.status} />
         </div>
@@ -489,6 +532,21 @@ function ImportantBadge() {
   return (
     <span className="inline-flex items-center gap-1 rounded-sm border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-700 dark:text-amber-300">
       Important
+    </span>
+  );
+}
+
+// Visible badge that surfaces the public-sharing flag on library
+// cards. Sibling to the detail view's `SharedBadge`; we render it
+// here too so workspace members scanning the library can identify
+// the records that carry a public URL without opening each one.
+function SharedBadge() {
+  return (
+    <span
+      className="inline-flex items-center gap-1 rounded-sm border border-sky-500/40 bg-sky-500/10 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-sky-700 dark:text-sky-300"
+      title="This transcript is publicly shared."
+    >
+      Shared
     </span>
   );
 }
@@ -605,6 +663,7 @@ type FetchLibraryArgs = {
   sort: LibrarySort;
   status: LibraryStatusFilter;
   important: LibraryImportantFilter;
+  shared: LibrarySharedFilter;
   tags: string[];
   cursor: string | null;
 };
@@ -615,6 +674,7 @@ async function fetchLibraryPage(args: FetchLibraryArgs): Promise<{ items: Librar
   params.set("sort", args.sort);
   if (args.status !== "") params.set("status", args.status);
   if (args.important !== "") params.set("important", args.important);
+  if (args.shared !== "") params.set("shared", args.shared);
   for (const tag of args.tags) params.append("tags", tag);
   if (args.cursor) params.set("cursor", args.cursor);
   const url = `/api/workspaces/${encodeURIComponent(args.workspaceSlug)}/transcripts?${params.toString()}`;

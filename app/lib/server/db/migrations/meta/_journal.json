@@ -50,6 +50,13 @@
       "when": 1776472497674,
       "tag": "0006_add_transcript_curation_controls",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1776475474268,
+      "tag": "0007_add_public_transcript_sharing",
+      "breakpoints": true
     }
   ]
 }

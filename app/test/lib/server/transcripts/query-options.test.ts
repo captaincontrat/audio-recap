@@ -22,9 +22,21 @@ describe("parseLibraryQueryOptions", () => {
       limit: LIBRARY_DEFAULT_PAGE_SIZE,
       important: null,
       tags: [],
+      shared: null,
     });
 
-    expect(parseLibraryQueryOptions({ search: null, sort: null, status: null, cursor: null, limit: null, important: null, tags: null })).toEqual({
+    expect(
+      parseLibraryQueryOptions({
+        search: null,
+        sort: null,
+        status: null,
+        cursor: null,
+        limit: null,
+        important: null,
+        tags: null,
+        shared: null,
+      }),
+    ).toEqual({
       search: null,
       sort: "newest_first",
       status: null,
@@ -32,9 +44,10 @@ describe("parseLibraryQueryOptions", () => {
       limit: LIBRARY_DEFAULT_PAGE_SIZE,
       important: null,
       tags: [],
+      shared: null,
     });
 
-    expect(parseLibraryQueryOptions({ search: "", sort: "", status: "", cursor: "", limit: "", important: "", tags: [] })).toEqual({
+    expect(parseLibraryQueryOptions({ search: "", sort: "", status: "", cursor: "", limit: "", important: "", tags: [], shared: "" })).toEqual({
       search: null,
       sort: "newest_first",
       status: null,
@@ -42,6 +55,7 @@ describe("parseLibraryQueryOptions", () => {
       limit: LIBRARY_DEFAULT_PAGE_SIZE,
       important: null,
       tags: [],
+      shared: null,
     });
   });
 
@@ -56,6 +70,8 @@ describe("parseLibraryQueryOptions", () => {
       "important_last",
       "tag_list_asc",
       "tag_list_desc",
+      "shared_first",
+      "unshared_first",
     ] as const;
     for (const sort of sorts) {
       expect(parseLibraryQueryOptions({ sort }).sort).toBe(sort);
@@ -178,6 +194,35 @@ describe("parseLibraryQueryOptions", () => {
     } catch (error) {
       expect(error).toBeInstanceOf(LibraryQueryParseError);
       expect((error as LibraryQueryParseError).reason).toBe("invalid_important");
+    }
+  });
+
+  test("parses the shared filter as a boolean or null", () => {
+    expect(parseLibraryQueryOptions({ shared: "true" }).shared).toBe(true);
+    expect(parseLibraryQueryOptions({ shared: "false" }).shared).toBe(false);
+    expect(parseLibraryQueryOptions({ shared: null }).shared).toBeNull();
+    expect(parseLibraryQueryOptions({ shared: "" }).shared).toBeNull();
+    expect(parseLibraryQueryOptions({}).shared).toBeNull();
+  });
+
+  test("throws invalid_shared for unknown shared values", () => {
+    // The spec calls out strict validation so typoed query
+    // parameters do not silently degrade to "show everything".
+    // Any value other than "true"/"false"/missing must raise.
+    try {
+      parseLibraryQueryOptions({ shared: "yes" });
+      throw new Error("expected parseLibraryQueryOptions to throw");
+    } catch (error) {
+      expect(error).toBeInstanceOf(LibraryQueryParseError);
+      expect((error as LibraryQueryParseError).reason).toBe("invalid_shared");
+    }
+
+    try {
+      parseLibraryQueryOptions({ shared: "1" });
+      throw new Error("expected parseLibraryQueryOptions to throw");
+    } catch (error) {
+      expect(error).toBeInstanceOf(LibraryQueryParseError);
+      expect((error as LibraryQueryParseError).reason).toBe("invalid_shared");
     }
   });
 

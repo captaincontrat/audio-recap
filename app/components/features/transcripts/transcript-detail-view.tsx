@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 
 import { TranscriptCurationPanel } from "@/components/features/transcripts/transcript-curation-panel";
+import { TranscriptSharePanel, type ShareUpdate } from "@/components/features/transcripts/transcript-share-panel";
 import { Button } from "@/components/ui/button";
 import { useEditSession } from "@/lib/client/edit-sessions";
 import { cn } from "@/lib/utils";
@@ -10,7 +11,8 @@ import { cn } from "@/lib/utils";
 // Mirrors the shape returned by `toDetailView` on the server. Client
 // bundle stays free of server-only imports. `add-transcript-curation-controls`
 // adds the `customTitle` / `tags` / `isImportant` fields used by the
-// curation panel below.
+// curation panel below. `add-public-transcript-sharing` adds the
+// nested `share` block the share panel reads/writes.
 export type DetailView = {
   id: string;
   workspaceId: string;
@@ -28,6 +30,15 @@ export type DetailView = {
   updatedAt: string;
   completedAt: string | null;
   failure: { code: string | null; summary: string | null } | null;
+  share: {
+    isPubliclyShared: boolean;
+    // Public URL path (e.g. `/share/<publicShareId>/<shareSecretId>`).
+    // `null` whenever sharing is disabled, the workspace has been
+    // archived, or the transcript has not completed processing —
+    // callers must not invent a path of their own.
+    publicSharePath: string | null;
+    shareUpdatedAt: string | null;
+  };
 };
 
 // Server-computed capabilities owned by
@@ -44,12 +55,21 @@ export type CurationCapabilities = {
   deleteDisabledReason: string | null;
 };
 
+// Share-management capability computed on the server by
+// `add-public-transcript-sharing`. The server mirrors this in every
+// POST the client issues, so the only thing the UI needs is a single
+// boolean: render controls or don't.
+export type ShareCapabilities = {
+  canManageSharing: boolean;
+};
+
 type Props = {
   workspaceSlug: string;
   transcriptId: string;
   initial: DetailView;
   canEditMarkdown: boolean;
   curation: CurationCapabilities;
+  sharing: ShareCapabilities;
 };
 
 type FetchState = { kind: "idle" } | { kind: "refreshing" } | { kind: "error"; message: string };
@@ -62,7 +82,7 @@ type FetchState = { kind: "idle" } | { kind: "refreshing" } | { kind: "error"; m
 //     content when the caller's workspace role allows it
 //   - the curation panel: rename, tags, important toggle, and delete
 //     (owned by `add-transcript-curation-controls`)
-export function TranscriptDetailView({ workspaceSlug, transcriptId, initial, canEditMarkdown, curation }: Props) {
+export function TranscriptDetailView({ workspaceSlug, transcriptId, initial, canEditMarkdown, curation, sharing }: Props) {
   const [state, setState] = useState<DetailView>(initial);
   const [fetchState, setFetchState] = useState<FetchState>({ kind: "idle" });
   const editSession = useEditSession({ workspaceSlug, transcriptId, canEdit: canEditMarkdown });
@@ -119,6 +139,7 @@ export function TranscriptDetailView({ workspaceSlug, transcriptId, initial, can
         <div className="flex flex-wrap items-start justify-between gap-3">
           <h1 className="text-2xl font-semibold">{state.displayTitle}</h1>
           <div className="flex items-center gap-2">
+            {state.share.isPubliclyShared ? <SharedBadge /> : null}
             {state.isImportant ? <ImportantBadge /> : null}
             <StatusBadge status={state.status} />
           </div>
@@ -132,6 +153,14 @@ export function TranscriptDetailView({ workspaceSlug, transcriptId, initial, can
           canDelete={curation.canDelete}
           deleteDisabledReason={curation.deleteDisabledReason}
           onCurationApplied={(updated) => setState((prev) => ({ ...prev, ...updated }))}
+        />
+        <TranscriptSharePanel
+          workspaceSlug={workspaceSlug}
+          transcriptId={transcriptId}
+          snapshot={state.share}
+          canManageSharing={sharing.canManageSharing}
+          status={state.status}
+          onShareApplied={applyShareUpdate(setState)}
         />
         <div className="flex flex-wrap items-center gap-2">
           <Button type="button" size="sm" variant="outline" onClick={refresh} disabled={fetchState.kind === "refreshing" || isEditing}>
@@ -387,6 +416,34 @@ function ImportantBadge() {
       Important
     </span>
   );
+}
+
+// Read-side awareness badge rendered next to the title when public
+// sharing is enabled. Visible to every authenticated browser,
+// including read-only users who do not see the share-management
+// controls. Gives read-only members a clear signal that the
+// transcript has a public link without exposing the URL itself.
+function SharedBadge() {
+  return (
+    <span
+      className="inline-flex items-center gap-1 rounded-sm border border-sky-500/40 bg-sky-500/10 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-sky-700 dark:text-sky-300"
+      title="This transcript is publicly shared."
+    >
+      Shared
+    </span>
+  );
+}
+
+// Applies a share-panel update to the authoritative detail state.
+// Kept outside the render function so the closure identity doesn't
+// change between renders and the share panel's effect doesn't
+// reset spuriously. The share panel only returns the share sub-tree,
+// so we merge it into `state.share` rather than into the top-level
+// view.
+function applyShareUpdate(setState: Dispatch<SetStateAction<DetailView>>) {
+  return (update: ShareUpdate) => {
+    setState((prev) => ({ ...prev, share: { ...prev.share, ...update } }));
+  };
 }
 
 function StatusBadge({ status }: { status: DetailView["status"] }) {

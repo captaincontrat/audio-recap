@@ -5,6 +5,7 @@ import { notFound, redirect } from "next/navigation";
 import {
   type InitialLibraryState,
   type LibraryImportantFilter,
+  type LibrarySharedFilter,
   type LibrarySort,
   type LibraryStatusFilter,
   TranscriptLibraryView,
@@ -50,6 +51,7 @@ export default async function TranscriptLibraryPage({
     cursor: firstString(rawSearchParams.cursor),
     limit: firstString(rawSearchParams.limit),
     important: firstString(rawSearchParams.important),
+    shared: firstString(rawSearchParams.shared),
     tags: allStrings(rawSearchParams.tags),
   };
 
@@ -67,6 +69,7 @@ export default async function TranscriptLibraryPage({
       sort: result.options.sort as LibrarySort,
       status: (result.options.status ?? "") as LibraryStatusFilter,
       important: importantQueryToFilter(result.options.important),
+      shared: sharedQueryToFilter(result.options.shared),
       tags: result.options.tags,
     };
   } catch (error) {
@@ -129,6 +132,16 @@ function allStrings(value: string | string[] | undefined): string[] | null {
 }
 
 function importantQueryToFilter(value: boolean | null): LibraryImportantFilter {
+  if (value === true) return "true";
+  if (value === false) return "false";
+  return "";
+}
+
+// Mirror of `importantQueryToFilter` for the public-sharing filter.
+// The server parses `shared=true` / `shared=false` into a nullable
+// boolean; the client select control uses string literals so we
+// translate here.
+function sharedQueryToFilter(value: boolean | null): LibrarySharedFilter {
   if (value === true) return "true";
   if (value === false) return "false";
   return "";

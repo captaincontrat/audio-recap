@@ -335,6 +335,30 @@ export const transcript = pgTable(
     tags: text("tags").array().notNull().default(sql`ARRAY[]::text[]`),
     tagSortKey: text("tag_sort_key"),
     isImportant: boolean("is_important").notNull().default(false),
+    // Public share state owned by `add-public-transcript-sharing`.
+    //
+    // - `isPubliclyShared` is the workspace-managed enable flag. When
+    //   `false`, the public route must return the generic unavailable
+    //   behavior regardless of whether the share identifiers are still
+    //   populated.
+    // - `publicShareId` is the stable public UUID used in the first
+    //   path segment of the double-UUID share URL. It is assigned on
+    //   first enable and reused across later enable/disable toggles so
+    //   the workspace has a stable public handle.
+    // - `shareSecretId` is the rotatable UUID used in the second path
+    //   segment. Rotating generates a fresh value and invalidates the
+    //   prior link immediately. Both columns are nullable so records
+    //   that have never been shared do not carry share identifiers.
+    // - `shareUpdatedAt` records the last share-management action
+    //   (enable, disable, or rotate). The archival lifecycle predicate
+    //   `isShareSuppressedByRestore` compares this against
+    //   `workspace.restoredAt` so previously-enabled public links stay
+    //   inactive after restore until a fresh share-management action
+    //   runs.
+    isPubliclyShared: boolean("is_publicly_shared").notNull().default(false),
+    publicShareId: text("public_share_id"),
+    shareSecretId: text("share_secret_id"),
+    shareUpdatedAt: timestamp("share_updated_at", { withTimezone: true, mode: "date" }),
     // Privacy-safe metadata retained for later consultation and
     // management. `originalDurationSec` may be null when probing fails
     // before the transcript is published; `submittedWithNotes` records
@@ -379,6 +403,16 @@ export const transcript = pgTable(
     // uses the array-contains operator (`@>`) to match transcripts that
     // include every selected tag.
     index("transcript_tags_gin_idx").using("gin", table.tags),
+    // Covers the shared-first / unshared-first library sorts and the
+    // shared/unshared filter added by `add-public-transcript-sharing`.
+    index("transcript_workspace_shared_idx").on(table.workspaceId, table.isPubliclyShared),
+    // Double-UUID resolution for the public read-only route looks up a
+    // transcript by its stable `publicShareId` and then verifies the
+    // path's secret segment matches `shareSecretId`. Partial index
+    // because the column is nullable for transcripts that have never
+    // been shared — only records with an assigned public handle need to
+    // be addressable.
+    uniqueIndex("transcript_public_share_id_unique").on(table.publicShareId).where(sql`${table.publicShareId} IS NOT NULL`),
   ],
 );
 

@@ -21,6 +21,12 @@ import { sortColumnFor } from "./sort-options";
 //   - `tag_sort_key`: `${flag}|${key}` where flag is `t` for a tagged
 //     row (key carries the sorted-tag-list string) or `u` for an
 //     untagged row (key is empty). Also owned by the curation change.
+//   - `shared_created`: composite `${flag}|${iso}` where flag is `1`
+//     (is_publicly_shared=true) or `0` (is_publicly_shared=false),
+//     paired with the row's `createdAt` ISO timestamp. Owned by
+//     `add-public-transcript-sharing` and mirrors the shape of the
+//     `important_created` cursor so the keyset predicate stays
+//     symmetrical across the two composite sorts.
 
 export type CursorPayload = {
   column: LibrarySortColumn;
@@ -83,7 +89,14 @@ function parseCursorJson(raw: string): CursorPayload | null {
 }
 
 function isKnownSortColumn(column: string): column is LibrarySortColumn {
-  return column === "created_at" || column === "updated_at" || column === "title" || column === "important_created" || column === "tag_sort_key";
+  return (
+    column === "created_at" ||
+    column === "updated_at" ||
+    column === "title" ||
+    column === "important_created" ||
+    column === "tag_sort_key" ||
+    column === "shared_created"
+  );
 }
 
 function toBase64Url(raw: string): string {
