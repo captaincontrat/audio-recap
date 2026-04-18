@@ -36,6 +36,13 @@
       "when": 1776466303588,
       "tag": "0004_add_web_meeting_processing",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1776468761385,
+      "tag": "0005_add_transcript_management_indexes",
+      "breakpoints": true
     }
   ]
 }

@@ -328,6 +328,19 @@ export const transcript = pgTable(
     index("transcript_workspace_status_idx").on(table.workspaceId, table.status),
     index("transcript_workspace_created_idx").on(table.workspaceId, table.createdAt),
     index("transcript_created_by_idx").on(table.createdByUserId),
+    // Covers the "recently updated" library sort from
+    // `add-transcript-management`: keep workspace scoping first so the
+    // library query can seek on `updated_at` without scanning every
+    // workspace row.
+    index("transcript_workspace_updated_idx").on(table.workspaceId, table.updatedAt),
+    // Covers the `displayTitle` A-Z / Z-A sort. `lower(title)` keeps the
+    // sort case-insensitive without requiring callers to normalize on
+    // the read path. `displayTitle` equals the processing-owned `title`
+    // until `add-transcript-curation-controls` introduces a custom
+    // override, at which point this index stays the physical backing for
+    // the default title sort while the effective-title rule layers on
+    // top.
+    index("transcript_workspace_title_ci_idx").on(table.workspaceId, sql`lower(${table.title})`),
   ],
 );
 

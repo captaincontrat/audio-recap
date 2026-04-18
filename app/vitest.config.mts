@@ -79,6 +79,17 @@ export default defineConfig({
         "lib/server/meetings/status-read.ts",
         "lib/server/meetings/transcripts.ts",
         "lib/server/meetings/index.ts",
+        // `private-transcript-library` DB-touching modules. The pure
+        // decision logic (cursor codec, sort option parsing, query
+        // option validation, projections, HTTP status mapping,
+        // refusal error classes, displayTitle derivation) lives in
+        // sibling modules that are unit-tested directly; the Drizzle
+        // query + workspace-resolver wiring here is covered by the
+        // Playwright e2e harness and the API route.
+        "lib/server/transcripts/queries.ts",
+        "lib/server/transcripts/library-read.ts",
+        "lib/server/transcripts/detail-read.ts",
+        "lib/server/transcripts/index.ts",
         "lib/server/storage/download.ts",
         // Client-side submission orchestration hits `fetch`, browser
         // upload, and the presigned URL flow end-to-end. It is covered
@@ -96,6 +107,9 @@ export default defineConfig({
         // component library, not catch regressions.
         "app/**/page.tsx",
         "app/**/layout.tsx",
+        "app/**/loading.tsx",
+        "app/**/error.tsx",
+        "app/**/not-found.tsx",
         "app/api/**",
         "components/features/**",
         "middleware.ts",

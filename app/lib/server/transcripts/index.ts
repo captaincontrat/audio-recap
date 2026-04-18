@@ -1,0 +1,50 @@
+// Barrel re-exports for the `private-transcript-library` capability.
+// Upstream route handlers, Server Components, and tests should import
+// through this module so the capability can evolve its file layout
+// without breaking downstream call sites.
+
+export { CursorDecodeError, type CursorPayload, decodeCursor, encodeCursor } from "./cursor";
+
+export { type DetailReadInputs, readTranscriptDetail } from "./detail-read";
+
+export { DISPLAY_TITLE_FALLBACK, type DisplayTitleSource, deriveDisplayTitle, deriveDisplayTitleFromRow } from "./display-title";
+
+export { type DetailReadRefusalReason, DetailReadRefusedError, type LibraryReadRefusalReason, LibraryReadRefusedError } from "./errors";
+
+export { detailReadRefusalToHttpStatus, libraryReadRefusalToHttpStatus } from "./http-status";
+
+export { type LibraryReadInputs, type LibraryReadResult, readTranscriptLibrary } from "./library-read";
+
+export {
+  type TranscriptDetailView,
+  type TranscriptLibraryItem,
+  type TranscriptSummaryRow,
+  toDetailView,
+  toLibraryItem,
+} from "./projections";
+
+export { findTranscriptDetailForWorkspace, listTranscriptsForWorkspace } from "./queries";
+
+export {
+  escapeSearchForIlike,
+  LIBRARY_DEFAULT_PAGE_SIZE,
+  LIBRARY_MAX_PAGE_SIZE,
+  LIBRARY_MAX_SEARCH_LENGTH,
+  LIBRARY_STATUS_FILTER_OPTIONS,
+  type LibraryQueryOptions,
+  LibraryQueryParseError,
+  type LibraryQueryParseFailureReason,
+  type LibraryRawQuery,
+  parseLibraryQueryOptions,
+} from "./query-options";
+
+export {
+  DEFAULT_LIBRARY_SORT,
+  isAscendingSort,
+  isTitleSort,
+  LIBRARY_SORT_OPTIONS,
+  type LibrarySortColumn,
+  type LibrarySortOption,
+  parseLibrarySort,
+  sortColumnFor,
+} from "./sort-options";

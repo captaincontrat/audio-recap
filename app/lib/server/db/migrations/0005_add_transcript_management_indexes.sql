@@ -1,0 +1,2 @@
+CREATE INDEX "transcript_workspace_updated_idx" ON "transcript" USING btree ("workspace_id","updated_at");--> statement-breakpoint
+CREATE INDEX "transcript_workspace_title_ci_idx" ON "transcript" USING btree ("workspace_id",lower("title"));
