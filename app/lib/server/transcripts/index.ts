@@ -4,6 +4,32 @@
 // without breaking downstream call sites.
 
 export {
+  buildTagSortKey,
+  canPatchCuration,
+  type CurationPatchInput,
+  type CurationPatchValues,
+  CurationValidationError,
+  type DeleteCurationInputs,
+  type DeleteCurationResult,
+  type DeleteRefusalReason,
+  DeleteRefusedError,
+  deleteRefusalToHttpStatus,
+  deleteTranscript,
+  evaluateDeleteAuthorization,
+  MAX_CUSTOM_TITLE_LENGTH,
+  MAX_TAG_COUNT,
+  MAX_TAG_LENGTH,
+  normalizeTag,
+  type PatchCurationInputs,
+  type PatchRefusalReason,
+  PatchRefusedError,
+  patchRefusalToHttpStatus,
+  patchTranscriptCuration,
+  TAG_SORT_KEY_SEPARATOR,
+  validateCurationPatch,
+} from "./curation";
+
+export {
   AUTOSAVE_DEBOUNCE_MS,
   autosaveMarkdown,
   type AutosaveInputs,
@@ -53,7 +79,9 @@ export {
   LIBRARY_DEFAULT_PAGE_SIZE,
   LIBRARY_MAX_PAGE_SIZE,
   LIBRARY_MAX_SEARCH_LENGTH,
+  LIBRARY_MAX_TAG_FILTER_COUNT,
   LIBRARY_STATUS_FILTER_OPTIONS,
+  type LibraryImportantFilter,
   type LibraryQueryOptions,
   LibraryQueryParseError,
   type LibraryQueryParseFailureReason,

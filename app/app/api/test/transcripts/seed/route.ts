@@ -15,6 +15,7 @@ import {
   workspaceMembership,
 } from "@/lib/server/db/schema";
 import { getServerEnv } from "@/lib/server/env";
+import { buildTagSortKey } from "@/lib/server/transcripts";
 
 // Test-only seeding endpoint that bypasses the normal processing
 // pipeline so Playwright e2e flows can exercise the durable library and
@@ -27,18 +28,30 @@ import { getServerEnv } from "@/lib/server/env";
 // Each transcript entry may override any durable column; defaults
 // mirror a "completed" transcript with non-empty title and markdown so
 // the library/detail surfaces render stable snapshots.
+//
+// The curation-specific fields (`customTitle`, `tags`, `isImportant`)
+// are accepted so curation e2e flows can seed records with a known
+// metadata baseline. `createdByUserEmail` overrides the creator FK for
+// deleted-creator fallback coverage: `null` clears the FK, a string
+// resolves to the matching user's id, and `undefined` defaults to the
+// `userEmail` caller.
 
 type SeedTranscriptInput = {
   id?: string;
   status?: TranscriptStatus;
   title?: string;
+  customTitle?: string | null;
   transcriptMarkdown?: string;
   recapMarkdown?: string;
+  tags?: string[];
+  tagSortKey?: string | null;
+  isImportant?: boolean;
   sourceMediaKind?: TranscriptSourceMediaKind;
   originalDurationSec?: number | null;
   submittedWithNotes?: boolean;
   failureCode?: TranscriptFailureCode | null;
   failureSummary?: string | null;
+  createdByUserEmail?: string | null;
   createdAt?: string;
   updatedAt?: string;
   completedAt?: string | null;
@@ -99,14 +112,21 @@ export async function POST(request: NextRequest) {
   const inserted: { id: string }[] = [];
   for (const input of transcripts ?? []) {
     const id = input.id ?? `test_transcript_${Math.random().toString(36).slice(2, 11)}`;
+    const createdByUserId = await resolveCreatorUserId(input.createdByUserEmail, userRow.id);
+    const tags = input.tags ?? [];
+    const tagSortKey = input.tagSortKey !== undefined ? input.tagSortKey : buildTagSortKey(tags);
     const values = {
       id,
       workspaceId: workspaceRow.id,
-      createdByUserId: userRow.id,
+      createdByUserId,
       status: input.status ?? ("completed" as TranscriptStatus),
       title: input.title ?? "Seeded transcript",
+      customTitle: input.customTitle ?? null,
       transcriptMarkdown: input.transcriptMarkdown ?? "# Transcript\n\nSeeded content.",
       recapMarkdown: input.recapMarkdown ?? "## Recap\n\n- Seeded recap point",
+      tags,
+      tagSortKey,
+      isImportant: input.isImportant ?? false,
       sourceMediaKind: input.sourceMediaKind ?? ("audio" as TranscriptSourceMediaKind),
       originalDurationSec: input.originalDurationSec ?? 600,
       submittedWithNotes: input.submittedWithNotes ?? false,
@@ -127,4 +147,21 @@ export async function POST(request: NextRequest) {
     archived: archiveWorkspace === true,
     transcripts: inserted,
   });
+}
+
+// Resolve a seed-specified creator email to the user FK the row should
+// carry. `undefined` defaults to the caller; `null` explicitly clears
+// the FK so the seed can reproduce the "creator account permanently
+// deleted" state; a string looks up the matching user by normalized
+// email and throws if no such user exists so the test is not silently
+// running against a wrong fixture.
+async function resolveCreatorUserId(override: SeedTranscriptInput["createdByUserEmail"], fallbackUserId: string): Promise<string | null> {
+  if (override === undefined) return fallbackUserId;
+  if (override === null) return null;
+  const rows = await getDb().select({ id: user.id }).from(user).where(eq(user.email, override)).limit(1);
+  const row = rows[0];
+  if (!row) {
+    throw new Error(`seedTranscripts: createdByUserEmail=${override} did not resolve to a user. Create the user first.`);
+  }
+  return row.id;
 }

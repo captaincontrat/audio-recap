@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
+import { type ChangeEvent, type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,12 +10,16 @@ import { cn } from "@/lib/utils";
 
 // Mirrors the summary projection shape returned by
 // `toLibraryItem` on the server. Kept local so the client bundle does
-// not import server-only modules.
+// not import server-only modules. `add-transcript-curation-controls`
+// adds the `tags` / `isImportant` fields used by the card chips and
+// the tag / important filter controls.
 export type LibraryItem = {
   id: string;
   workspaceId: string;
   status: "queued" | "preprocessing" | "transcribing" | "generating_recap" | "generating_title" | "finalizing" | "retrying" | "completed" | "failed";
   displayTitle: string;
+  tags: string[];
+  isImportant: boolean;
   sourceMediaKind: "audio" | "video";
   submittedWithNotes: boolean;
   createdAt: string;
@@ -23,7 +27,18 @@ export type LibraryItem = {
   completedAt: string | null;
 };
 
-export type LibrarySort = "newest_first" | "oldest_first" | "recently_updated" | "title_asc" | "title_desc";
+// Sort vocabulary extended by `add-transcript-curation-controls`.
+// Keep in lockstep with the server-side `LIBRARY_SORT_OPTIONS` union.
+export type LibrarySort =
+  | "newest_first"
+  | "oldest_first"
+  | "recently_updated"
+  | "title_asc"
+  | "title_desc"
+  | "important_first"
+  | "important_last"
+  | "tag_list_asc"
+  | "tag_list_desc";
 
 export type LibraryStatusFilter =
   | ""
@@ -37,12 +52,20 @@ export type LibraryStatusFilter =
   | "completed"
   | "failed";
 
+// `""` means "no filter". `"true"` / `"false"` restrict the library
+// to records with that important state. The server parses the URL
+// form (`important=true`); this type mirrors the select-control
+// vocabulary.
+export type LibraryImportantFilter = "" | "true" | "false";
+
 export type InitialLibraryState = {
   items: LibraryItem[];
   nextCursor: string | null;
   search: string;
   sort: LibrarySort;
   status: LibraryStatusFilter;
+  important: LibraryImportantFilter;
+  tags: string[];
 };
 
 type Props = {
@@ -55,9 +78,9 @@ type FetchState = { kind: "idle" } | { kind: "loading" } | { kind: "loading_more
 const SEARCH_DEBOUNCE_MS = 300;
 
 // Full-page library view. Owns the query controls (search, sort,
-// status filter), the accumulated item list, the `nextCursor` for the
-// "Load more" interaction, and the distinct loading/empty/no-results/
-// error states the spec calls out.
+// status filter, important filter, tag filter), the accumulated item
+// list, the `nextCursor` for the "Load more" interaction, and the
+// distinct loading/empty/no-results/error states the spec calls out.
 export function TranscriptLibraryView({ workspaceSlug, initial }: Props) {
   const [items, setItems] = useState<LibraryItem[]>(initial.items);
   const [nextCursor, setNextCursor] = useState<string | null>(initial.nextCursor);
@@ -66,6 +89,8 @@ export function TranscriptLibraryView({ workspaceSlug, initial }: Props) {
   const [search, setSearch] = useState<string>(initial.search);
   const [sort, setSort] = useState<LibrarySort>(initial.sort);
   const [status, setStatus] = useState<LibraryStatusFilter>(initial.status);
+  const [important, setImportant] = useState<LibraryImportantFilter>(initial.important);
+  const [tagFilter, setTagFilter] = useState<string[]>(initial.tags);
 
   const [fetchState, setFetchState] = useState<FetchState>({ kind: "idle" });
 
@@ -82,7 +107,12 @@ export function TranscriptLibraryView({ workspaceSlug, initial }: Props) {
     return () => clearTimeout(handle);
   }, [searchInput]);
 
-  const fetchSignature = useMemo(() => `${search}|${sort}|${status}`, [search, sort, status]);
+  // Signature that triggers a pagination reset. Tag filter joins the
+  // sorted tag list so a different order of the same tags is a no-op.
+  const fetchSignature = useMemo(
+    () => `${search}|${sort}|${status}|${important}|${[...tagFilter].sort().join(",")}`,
+    [search, sort, status, important, tagFilter],
+  );
 
   useEffect(() => {
     if (!hasHydratedControlsRef.current) {
@@ -94,7 +124,7 @@ export function TranscriptLibraryView({ workspaceSlug, initial }: Props) {
     setFetchState({ kind: "loading" });
     (async () => {
       try {
-        const page = await fetchLibraryPage({ workspaceSlug, search, sort, status, cursor: null });
+        const page = await fetchLibraryPage({ workspaceSlug, search, sort, status, important, tags: tagFilter, cursor: null });
         if (cancelled) return;
         setItems(page.items);
         setNextCursor(page.nextCursor);
@@ -111,13 +141,13 @@ export function TranscriptLibraryView({ workspaceSlug, initial }: Props) {
     return () => {
       cancelled = true;
     };
-  }, [workspaceSlug, search, sort, status, fetchSignature]);
+  }, [workspaceSlug, search, sort, status, important, tagFilter]);
 
   async function handleLoadMore() {
     if (!nextCursor || fetchState.kind === "loading" || fetchState.kind === "loading_more") return;
     setFetchState({ kind: "loading_more" });
     try {
-      const page = await fetchLibraryPage({ workspaceSlug, search, sort, status, cursor: nextCursor });
+      const page = await fetchLibraryPage({ workspaceSlug, search, sort, status, important, tags: tagFilter, cursor: nextCursor });
       setItems((prev) => [...prev, ...page.items]);
       setNextCursor(page.nextCursor);
       setFetchState({ kind: "idle" });
@@ -143,6 +173,14 @@ export function TranscriptLibraryView({ workspaceSlug, initial }: Props) {
     setStatus(event.target.value as LibraryStatusFilter);
   }
 
+  function handleImportantChange(event: ChangeEvent<HTMLSelectElement>) {
+    setImportant(event.target.value as LibraryImportantFilter);
+  }
+
+  function handleTagFilterChange(next: string[]) {
+    setTagFilter(next);
+  }
+
   function handleRetry() {
     if (fetchState.kind !== "error") return;
     if (fetchState.retry === "load_more") {
@@ -153,7 +191,7 @@ export function TranscriptLibraryView({ workspaceSlug, initial }: Props) {
     setFetchState({ kind: "loading" });
     (async () => {
       try {
-        const page = await fetchLibraryPage({ workspaceSlug, search, sort, status, cursor: null });
+        const page = await fetchLibraryPage({ workspaceSlug, search, sort, status, important, tags: tagFilter, cursor: null });
         if (signature !== fetchSignature) return;
         setItems(page.items);
         setNextCursor(page.nextCursor);
@@ -168,7 +206,7 @@ export function TranscriptLibraryView({ workspaceSlug, initial }: Props) {
     })();
   }
 
-  const isSearching = search.length > 0 || status !== "";
+  const isSearching = search.length > 0 || status !== "" || important !== "" || tagFilter.length > 0;
   const showInitialLoading = fetchState.kind === "loading" && items.length === 0;
   const showReloadError = fetchState.kind === "error" && fetchState.retry === "reload" && items.length === 0;
   const showListErrorBanner = fetchState.kind === "error" && fetchState.retry === "reload" && items.length > 0;
@@ -182,6 +220,10 @@ export function TranscriptLibraryView({ workspaceSlug, initial }: Props) {
         onSortChange={handleSortChange}
         status={status}
         onStatusChange={handleStatusChange}
+        important={important}
+        onImportantChange={handleImportantChange}
+        tagFilter={tagFilter}
+        onTagFilterChange={handleTagFilterChange}
         onSearchSubmit={handleSearchSubmit}
       />
 
@@ -233,6 +275,10 @@ function LibraryControls({
   onSortChange,
   status,
   onStatusChange,
+  important,
+  onImportantChange,
+  tagFilter,
+  onTagFilterChange,
   onSearchSubmit,
 }: {
   searchInput: string;
@@ -241,62 +287,144 @@ function LibraryControls({
   onSortChange: (event: ChangeEvent<HTMLSelectElement>) => void;
   status: LibraryStatusFilter;
   onStatusChange: (event: ChangeEvent<HTMLSelectElement>) => void;
+  important: LibraryImportantFilter;
+  onImportantChange: (event: ChangeEvent<HTMLSelectElement>) => void;
+  tagFilter: string[];
+  onTagFilterChange: (next: string[]) => void;
   onSearchSubmit: (event: FormEvent<HTMLFormElement>) => void;
 }) {
   return (
-    <form onSubmit={onSearchSubmit} className="flex flex-col gap-3 sm:flex-row sm:items-end sm:gap-4">
-      <div className="flex-1">
-        <Label htmlFor="library-search">Search transcripts</Label>
-        <Input
-          id="library-search"
-          value={searchInput}
-          onChange={(event) => setSearchInput(event.target.value)}
-          placeholder="Search titles, recaps, and transcripts"
-          type="search"
+    <form onSubmit={onSearchSubmit} className="flex flex-col gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:gap-4">
+        <div className="flex-1">
+          <Label htmlFor="library-search">Search transcripts</Label>
+          <Input
+            id="library-search"
+            value={searchInput}
+            onChange={(event) => setSearchInput(event.target.value)}
+            placeholder="Search titles, recaps, and transcripts"
+            type="search"
+          />
+        </div>
+        <div className="flex flex-col gap-2 sm:w-48">
+          <Label htmlFor="library-sort">Sort</Label>
+          <select
+            id="library-sort"
+            value={sort}
+            onChange={onSortChange}
+            className={cn(
+              "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            )}
+          >
+            <option value="newest_first">Newest first</option>
+            <option value="oldest_first">Oldest first</option>
+            <option value="recently_updated">Recently updated</option>
+            <option value="title_asc">Title A–Z</option>
+            <option value="title_desc">Title Z–A</option>
+            <option value="important_first">Important first</option>
+            <option value="important_last">Important last</option>
+            <option value="tag_list_asc">Tags A–Z</option>
+            <option value="tag_list_desc">Tags Z–A</option>
+          </select>
+        </div>
+        <div className="flex flex-col gap-2 sm:w-48">
+          <Label htmlFor="library-status">Status</Label>
+          <select
+            id="library-status"
+            value={status}
+            onChange={onStatusChange}
+            className={cn(
+              "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            )}
+          >
+            <option value="">All statuses</option>
+            <option value="queued">Queued</option>
+            <option value="preprocessing">Preprocessing</option>
+            <option value="transcribing">Transcribing</option>
+            <option value="generating_recap">Writing recap</option>
+            <option value="generating_title">Titling</option>
+            <option value="finalizing">Finalizing</option>
+            <option value="retrying">Retrying</option>
+            <option value="completed">Completed</option>
+            <option value="failed">Failed</option>
+          </select>
+        </div>
+        <div className="flex flex-col gap-2 sm:w-48">
+          <Label htmlFor="library-important">Important</Label>
+          <select
+            id="library-important"
+            value={important}
+            onChange={onImportantChange}
+            className={cn(
+              "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            )}
+          >
+            <option value="">All transcripts</option>
+            <option value="true">Important only</option>
+            <option value="false">Not important</option>
+          </select>
+        </div>
+      </div>
+      <TagFilterEditor value={tagFilter} onChange={onTagFilterChange} />
+    </form>
+  );
+}
+
+function TagFilterEditor({ value, onChange }: { value: string[]; onChange: (next: string[]) => void }) {
+  const [input, setInput] = useState<string>("");
+
+  function addTag(raw: string) {
+    const normalized = raw.trim().toLowerCase();
+    if (normalized.length === 0) return;
+    if (value.some((tag) => tag.toLowerCase() === normalized)) {
+      setInput("");
+      return;
+    }
+    onChange([...value, normalized]);
+    setInput("");
+  }
+
+  function removeTag(tag: string) {
+    onChange(value.filter((entry) => entry !== tag));
+  }
+
+  return (
+    <div className="flex flex-col gap-1">
+      <Label htmlFor="library-tag-filter">Filter by tags</Label>
+      <div className="flex flex-wrap items-center gap-1 rounded-md border border-input bg-background p-2">
+        {value.map((tag) => (
+          <span key={tag} className="inline-flex items-center gap-1 rounded-sm bg-muted px-1.5 py-0.5 text-xs">
+            {tag}
+            <button
+              type="button"
+              onClick={() => removeTag(tag)}
+              className="rounded-sm px-0.5 text-muted-foreground hover:bg-muted-foreground/10"
+              aria-label={`Remove tag filter ${tag}`}
+            >
+              ×
+            </button>
+          </span>
+        ))}
+        <input
+          id="library-tag-filter"
+          value={input}
+          onChange={(event) => setInput(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === ",") {
+              event.preventDefault();
+              addTag(input);
+            } else if (event.key === "Backspace" && input.length === 0 && value.length > 0) {
+              removeTag(value[value.length - 1]);
+            }
+          }}
+          placeholder={value.length === 0 ? "Filter by tag (press Enter)" : ""}
+          className="min-w-[10rem] flex-1 bg-transparent px-1 py-0.5 text-sm outline-none"
         />
       </div>
-      <div className="flex flex-col gap-2 sm:w-48">
-        <Label htmlFor="library-sort">Sort</Label>
-        <select
-          id="library-sort"
-          value={sort}
-          onChange={onSortChange}
-          className={cn(
-            "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-          )}
-        >
-          <option value="newest_first">Newest first</option>
-          <option value="oldest_first">Oldest first</option>
-          <option value="recently_updated">Recently updated</option>
-          <option value="title_asc">Title A–Z</option>
-          <option value="title_desc">Title Z–A</option>
-        </select>
-      </div>
-      <div className="flex flex-col gap-2 sm:w-48">
-        <Label htmlFor="library-status">Status</Label>
-        <select
-          id="library-status"
-          value={status}
-          onChange={onStatusChange}
-          className={cn(
-            "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-          )}
-        >
-          <option value="">All statuses</option>
-          <option value="queued">Queued</option>
-          <option value="preprocessing">Preprocessing</option>
-          <option value="transcribing">Transcribing</option>
-          <option value="generating_recap">Writing recap</option>
-          <option value="generating_title">Titling</option>
-          <option value="finalizing">Finalizing</option>
-          <option value="retrying">Retrying</option>
-          <option value="completed">Completed</option>
-          <option value="failed">Failed</option>
-        </select>
-      </div>
-    </form>
+    </div>
   );
 }
 
@@ -323,8 +451,23 @@ function LibraryItemCard({ item, workspaceSlug }: { item: LibraryItem; workspace
     >
       <div className="flex flex-wrap items-start justify-between gap-2">
         <span className="text-sm font-semibold text-foreground">{item.displayTitle}</span>
-        <StatusBadge status={item.status} />
+        <div className="flex items-center gap-2">
+          {item.isImportant ? <ImportantBadge /> : null}
+          <StatusBadge status={item.status} />
+        </div>
       </div>
+      {item.tags.length > 0 ? (
+        <ul className="flex flex-wrap gap-1" aria-label="Tags">
+          {item.tags.map((tag) => (
+            <li
+              key={tag}
+              className="inline-flex items-center rounded-sm border border-border/60 bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
+            >
+              {tag}
+            </li>
+          ))}
+        </ul>
+      ) : null}
       <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground">
         <dt>Created</dt>
         <dd>{createdAt.toLocaleString()}</dd>
@@ -334,6 +477,19 @@ function LibraryItemCard({ item, workspaceSlug }: { item: LibraryItem; workspace
         <dd>{item.sourceMediaKind === "video" ? "Video" : "Audio"}</dd>
       </dl>
     </Link>
+  );
+}
+
+// Small decorative badge that echoes the detail-view
+// `ImportantBadge`. Kept local to this file so each library card can
+// render the marker without importing from the detail component and
+// dragging its broader surface. The visible "Important" text is the
+// accessible name so screen readers do not need an explicit label.
+function ImportantBadge() {
+  return (
+    <span className="inline-flex items-center gap-1 rounded-sm border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-700 dark:text-amber-300">
+      Important
+    </span>
   );
 }
 
@@ -448,6 +604,8 @@ type FetchLibraryArgs = {
   search: string;
   sort: LibrarySort;
   status: LibraryStatusFilter;
+  important: LibraryImportantFilter;
+  tags: string[];
   cursor: string | null;
 };
 
@@ -456,6 +614,8 @@ async function fetchLibraryPage(args: FetchLibraryArgs): Promise<{ items: Librar
   if (args.search.length > 0) params.set("search", args.search);
   params.set("sort", args.sort);
   if (args.status !== "") params.set("status", args.status);
+  if (args.important !== "") params.set("important", args.important);
+  for (const tag of args.tags) params.append("tags", tag);
   if (args.cursor) params.set("cursor", args.cursor);
   const url = `/api/workspaces/${encodeURIComponent(args.workspaceSlug)}/transcripts?${params.toString()}`;
 

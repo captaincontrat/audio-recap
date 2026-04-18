@@ -1,11 +1,12 @@
 import "server-only";
 
-import { and, asc, desc, eq, ilike, or, sql } from "drizzle-orm";
+import { and, arrayContains, asc, desc, eq, ilike, isNotNull, isNull, or, sql } from "drizzle-orm";
 
 import { getDb } from "@/lib/server/db/client";
 import { type TranscriptRow, transcript } from "@/lib/server/db/schema";
 import type { CursorPayload } from "./cursor";
 import { encodeCursor } from "./cursor";
+import { buildTagSortKey } from "./curation/validation";
 import type { TranscriptSummaryRow } from "./projections";
 import { type TranscriptLibraryItem, toLibraryItem } from "./projections";
 import type { LibraryQueryOptions } from "./query-options";
@@ -40,9 +41,14 @@ export async function listTranscriptsForWorkspace(args: ListTranscriptsForWorksp
   const base = eq(transcript.workspaceId, workspaceId);
   const searchFilter = options.search ? buildSearchFilter(options.search) : undefined;
   const statusFilter = options.status ? eq(transcript.status, options.status) : undefined;
+  // `add-transcript-curation-controls` adds important-state and
+  // tag-list membership filters. `important === null` skips the
+  // filter; `tags.length === 0` skips the tag filter.
+  const importantFilter = options.important === null ? undefined : eq(transcript.isImportant, options.important);
+  const tagsFilter = options.tags.length === 0 ? undefined : arrayContains(transcript.tags, options.tags);
   const keysetFilter = options.cursor ? buildKeysetFilter(options.sort, options.cursor) : undefined;
 
-  const where = and(base, searchFilter, statusFilter, keysetFilter);
+  const where = and(base, searchFilter, statusFilter, importantFilter, tagsFilter, keysetFilter);
 
   const rows: TranscriptSummaryRow[] = await getDb()
     .select({
@@ -50,6 +56,9 @@ export async function listTranscriptsForWorkspace(args: ListTranscriptsForWorksp
       workspaceId: transcript.workspaceId,
       status: transcript.status,
       title: transcript.title,
+      customTitle: transcript.customTitle,
+      tags: transcript.tags,
+      isImportant: transcript.isImportant,
       sourceMediaKind: transcript.sourceMediaKind,
       submittedWithNotes: transcript.submittedWithNotes,
       createdAt: transcript.createdAt,
@@ -83,9 +92,22 @@ export async function findTranscriptDetailForWorkspace(args: { transcriptId: str
   return rows[0] ?? null;
 }
 
+// Case-insensitive effective-title expression. The curation change
+// (`add-transcript-curation-controls`) owns the `customTitle ?? title`
+// rule; this expression collapses the coalesce + lower-case through a
+// single SQL projection so the sort, the cursor predicate, and the
+// covering index (`transcript_workspace_title_ci_idx`) all agree on the
+// same shape.
+const effectiveTitleSql = sql`lower(coalesce(${transcript.customTitle}, ${transcript.title}))`;
+
 function buildSearchFilter(search: string) {
   const pattern = `%${escapeSearchForIlike(search)}%`;
-  return or(ilike(transcript.title, pattern), ilike(transcript.transcriptMarkdown, pattern), ilike(transcript.recapMarkdown, pattern));
+  return or(
+    ilike(transcript.title, pattern),
+    ilike(transcript.customTitle, pattern),
+    ilike(transcript.transcriptMarkdown, pattern),
+    ilike(transcript.recapMarkdown, pattern),
+  );
 }
 
 function buildKeysetFilter(sort: LibrarySortOption, cursor: CursorPayload) {
@@ -105,14 +127,81 @@ function buildKeysetFilter(sort: LibrarySortOption, cursor: CursorPayload) {
     }
     case "title": {
       return ascending
-        ? sql`(lower(${transcript.title}), ${transcript.id}) > (${cursor.value}, ${cursor.id})`
-        : sql`(lower(${transcript.title}), ${transcript.id}) < (${cursor.value}, ${cursor.id})`;
+        ? sql`(${effectiveTitleSql}, ${transcript.id}) > (${cursor.value}, ${cursor.id})`
+        : sql`(${effectiveTitleSql}, ${transcript.id}) < (${cursor.value}, ${cursor.id})`;
     }
+    case "important_created":
+      return buildImportantCreatedKeysetFilter(sort, cursor);
+    case "tag_sort_key":
+      return buildTagSortKeysetFilter(sort, cursor);
     default: {
       const exhaustive: never = cursor.column;
       throw new Error(`Unhandled cursor column: ${String(exhaustive)}`);
     }
   }
+}
+
+// The `important` composite sorts order rows primarily by
+// `isImportant` (with important-first descending and important-last
+// ascending), then by `createdAt`, and finally by `id` as the
+// tiebreaker. The cursor carries the boundary `(flag|createdAt)` pair
+// as a string and the keyset predicate seeks strictly past that
+// boundary.
+function buildImportantCreatedKeysetFilter(sort: LibrarySortOption, cursor: CursorPayload) {
+  const parsed = parseImportantCreatedCursor(cursor.value);
+  if (!parsed) {
+    throw new Error("Invalid important_created cursor payload");
+  }
+  const { important, createdAt } = parsed;
+  const at = new Date(createdAt);
+  if (sort === "important_first") {
+    // `(is_important desc, created_at desc, id desc)`.
+    // Use boolean DESC trick: map `is_important` to an integer so we
+    // can compare it with Postgres's row-tuple comparison semantics.
+    // `true` is greater than `false`; DESC means "strictly less than
+    // the boundary" in tuple comparison, the `int4` cast keeps the
+    // operator stable.
+    return sql`(${transcript.isImportant}::int, ${transcript.createdAt}, ${transcript.id}) < (${important ? 1 : 0}, ${at.toISOString()}::timestamptz, ${cursor.id})`;
+  }
+  // `important_last`: ascending composite, "strictly greater than".
+  return sql`(${transcript.isImportant}::int, ${transcript.createdAt}, ${transcript.id}) > (${important ? 1 : 0}, ${at.toISOString()}::timestamptz, ${cursor.id})`;
+}
+
+// Tag-list sorts need to place untagged (NULL tag_sort_key) records
+// consistently: untagged AFTER tagged for `tag_list_asc`, BEFORE
+// tagged for `tag_list_desc`. PostgreSQL's default NULLS-LAST (asc) /
+// NULLS-FIRST (desc) gives the right ordering for the primary column,
+// but keyset pagination on a nullable column can't use raw tuple
+// comparison without extra care. The approach: split the boundary
+// into two cases based on whether the cursor is on a tagged or
+// untagged row.
+function buildTagSortKeysetFilter(sort: LibrarySortOption, cursor: CursorPayload) {
+  const parsed = parseTagSortCursor(cursor.value);
+  if (!parsed) {
+    throw new Error("Invalid tag_sort_key cursor payload");
+  }
+  const { tagged, key } = parsed;
+  if (sort === "tag_list_asc") {
+    if (tagged) {
+      // Past this tagged row: next row is either a greater tagged row
+      // (same or greater key, later id) OR an untagged row (NULL is
+      // after all tagged rows for NULLS-LAST).
+      return or(sql`(${transcript.tagSortKey}, ${transcript.id}) > (${key}, ${cursor.id})`, isNull(transcript.tagSortKey));
+    }
+    // Cursor sits on an untagged row: only further untagged rows
+    // with id greater than the boundary remain.
+    return and(isNull(transcript.tagSortKey), sql`${transcript.id} > ${cursor.id}`);
+  }
+  // `tag_list_desc`: reverse. Untagged rows come first (NULLS-FIRST),
+  // sorted by id DESC, then tagged rows sorted by (key DESC, id DESC).
+  if (!tagged) {
+    // Cursor on an untagged row: next is either another untagged row
+    // with a smaller id (DESC iteration), or any tagged row.
+    return or(and(isNull(transcript.tagSortKey), sql`${transcript.id} < ${cursor.id}`), isNotNull(transcript.tagSortKey));
+  }
+  // Cursor on a tagged row: only tagged rows strictly "less than" the
+  // boundary (descending) remain.
+  return and(isNotNull(transcript.tagSortKey), sql`(${transcript.tagSortKey}, ${transcript.id}) < (${key}, ${cursor.id})`);
 }
 
 function orderByFor(sort: LibrarySortOption) {
@@ -124,9 +213,27 @@ function orderByFor(sort: LibrarySortOption) {
     case "recently_updated":
       return [desc(transcript.updatedAt), desc(transcript.id)];
     case "title_asc":
-      return [asc(sql`lower(${transcript.title})`), asc(transcript.id)];
+      return [asc(effectiveTitleSql), asc(transcript.id)];
     case "title_desc":
-      return [desc(sql`lower(${transcript.title})`), desc(transcript.id)];
+      return [desc(effectiveTitleSql), desc(transcript.id)];
+    case "important_first":
+      // Important records first (desc), then most recently created,
+      // then id as the tiebreaker for stable keyset pagination.
+      return [desc(transcript.isImportant), desc(transcript.createdAt), desc(transcript.id)];
+    case "important_last":
+      // Non-important first (asc). Keep the same `createdAt` /
+      // `id` secondary ordering so keyset pagination lines up with
+      // the composite cursor.
+      return [asc(transcript.isImportant), asc(transcript.createdAt), asc(transcript.id)];
+    case "tag_list_asc":
+      // Postgres default for ASC is NULLS-LAST which matches
+      // "untagged after tagged" per spec. Tiebreaker on id for
+      // stable keyset pagination.
+      return [asc(transcript.tagSortKey), asc(transcript.id)];
+    case "tag_list_desc":
+      // DESC default is NULLS-FIRST which matches "untagged before
+      // tagged" per spec.
+      return [desc(transcript.tagSortKey), desc(transcript.id)];
     default: {
       const exhaustive: never = sort;
       throw new Error(`Unhandled library sort option: ${String(exhaustive)}`);
@@ -149,10 +256,59 @@ function boundaryValueFor(sort: LibrarySortOption, row: TranscriptSummaryRow): s
       return row.updatedAt.toISOString();
     case "title_asc":
     case "title_desc":
-      return row.title.toLowerCase();
+      return effectiveTitleFor(row);
+    case "important_first":
+    case "important_last":
+      // Composite `${flag}|${iso}` where flag is `1` or `0` so the
+      // cursor encodes enough boundary information to resume the
+      // keyset seek across the is_important boundary.
+      return `${row.isImportant ? "1" : "0"}|${row.createdAt.toISOString()}`;
+    case "tag_list_asc":
+    case "tag_list_desc": {
+      // Derive the same sort key the repository persists so the
+      // cursor boundary exactly matches the ORDER BY column.
+      const key = buildTagSortKey(row.tags);
+      return key === null ? "u|" : `t|${key}`;
+    }
     default: {
       const exhaustive: never = sort;
       throw new Error(`Unhandled library sort option: ${String(exhaustive)}`);
     }
   }
+}
+
+// Mirror the SQL `lower(coalesce(custom_title, title))` projection so
+// cursor values stay in sync with the order-by clause. A null
+// `customTitle` collapses to the processing title, matching the
+// covering index expression.
+function effectiveTitleFor(row: TranscriptSummaryRow): string {
+  const override = row.customTitle;
+  const source = override != null ? override : row.title;
+  return source.toLowerCase();
+}
+
+// Parse `${flag}|${iso}` (flag is `1` or `0`) into a typed boundary
+// pair. Returns null for malformed payloads so `buildKeysetFilter`
+// can surface a clear error rather than silently producing a bad
+// SQL predicate.
+function parseImportantCreatedCursor(value: string): { important: boolean; createdAt: string } | null {
+  const sep = value.indexOf("|");
+  if (sep < 0) return null;
+  const flag = value.slice(0, sep);
+  const createdAt = value.slice(sep + 1);
+  if (flag !== "1" && flag !== "0") return null;
+  if (createdAt.length === 0) return null;
+  return { important: flag === "1", createdAt };
+}
+
+// Parse `${flag}|${key}` (flag is `t` for tagged, `u` for untagged)
+// into a typed boundary pair. Untagged rows carry an empty key.
+function parseTagSortCursor(value: string): { tagged: boolean; key: string } | null {
+  const sep = value.indexOf("|");
+  if (sep < 0) return null;
+  const flag = value.slice(0, sep);
+  const key = value.slice(sep + 1);
+  if (flag !== "t" && flag !== "u") return null;
+  if (flag === "t" && key.length === 0) return null;
+  return { tagged: flag === "t", key };
 }

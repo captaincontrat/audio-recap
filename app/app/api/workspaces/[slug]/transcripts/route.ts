@@ -17,12 +17,28 @@ export async function GET(request: Request, context: { params: Promise<{ slug: s
 
   const { slug } = await context.params;
   const url = new URL(request.url);
+  // `?tags=a&tags=b` is the canonical multi-value form; also accept a
+  // comma-separated list (`?tags=a,b`) so URL-shortening / copy-paste
+  // does not break. Delegating normalization to the query-options
+  // parser keeps the API and Server Component entry points in sync.
+  const tagsParams = url.searchParams.getAll("tags");
+  const tags: string[] | null =
+    tagsParams.length === 0
+      ? null
+      : tagsParams.flatMap((value) =>
+          value
+            .split(",")
+            .map((t) => t.trim())
+            .filter(Boolean),
+        );
   const query = {
     search: url.searchParams.get("search"),
     sort: url.searchParams.get("sort"),
     status: url.searchParams.get("status"),
     cursor: url.searchParams.get("cursor"),
     limit: url.searchParams.get("limit"),
+    important: url.searchParams.get("important"),
+    tags,
   };
 
   try {

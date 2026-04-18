@@ -4,6 +4,7 @@ import { notFound, redirect } from "next/navigation";
 
 import {
   type InitialLibraryState,
+  type LibraryImportantFilter,
   type LibrarySort,
   type LibraryStatusFilter,
   TranscriptLibraryView,
@@ -48,6 +49,8 @@ export default async function TranscriptLibraryPage({
     status: firstString(rawSearchParams.status),
     cursor: firstString(rawSearchParams.cursor),
     limit: firstString(rawSearchParams.limit),
+    important: firstString(rawSearchParams.important),
+    tags: allStrings(rawSearchParams.tags),
   };
 
   let initial: InitialLibraryState;
@@ -63,6 +66,8 @@ export default async function TranscriptLibraryPage({
       search: result.options.search ?? "",
       sort: result.options.sort as LibrarySort,
       status: (result.options.status ?? "") as LibraryStatusFilter,
+      important: importantQueryToFilter(result.options.important),
+      tags: result.options.tags,
     };
   } catch (error) {
     if (error instanceof LibraryReadRefusedError) {
@@ -106,6 +111,27 @@ function firstString(value: string | string[] | undefined): string | null {
     return value[0] ?? null;
   }
   return value ?? null;
+}
+
+// Produce a flat string[] from either a repeated `tags=a&tags=b`
+// search param or a single comma-separated `tags=a,b` value. Returns
+// `null` so the parser can distinguish "no filter" from an empty list.
+function allStrings(value: string | string[] | undefined): string[] | null {
+  if (value == null) return null;
+  const list = Array.isArray(value) ? value : [value];
+  const flattened = list.flatMap((entry) =>
+    entry
+      .split(",")
+      .map((part) => part.trim())
+      .filter(Boolean),
+  );
+  return flattened.length === 0 ? null : flattened;
+}
+
+function importantQueryToFilter(value: boolean | null): LibraryImportantFilter {
+  if (value === true) return "true";
+  if (value === false) return "false";
+  return "";
 }
 
 function ArchivedWorkspaceNotice({ slug }: { slug: string }) {

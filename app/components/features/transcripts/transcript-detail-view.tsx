@@ -2,17 +2,23 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { TranscriptCurationPanel } from "@/components/features/transcripts/transcript-curation-panel";
 import { Button } from "@/components/ui/button";
 import { useEditSession } from "@/lib/client/edit-sessions";
 import { cn } from "@/lib/utils";
 
 // Mirrors the shape returned by `toDetailView` on the server. Client
-// bundle stays free of server-only imports.
+// bundle stays free of server-only imports. `add-transcript-curation-controls`
+// adds the `customTitle` / `tags` / `isImportant` fields used by the
+// curation panel below.
 export type DetailView = {
   id: string;
   workspaceId: string;
   status: "queued" | "preprocessing" | "transcribing" | "generating_recap" | "generating_title" | "finalizing" | "retrying" | "completed" | "failed";
   displayTitle: string;
+  customTitle: string | null;
+  tags: string[];
+  isImportant: boolean;
   transcriptMarkdown: string;
   recapMarkdown: string;
   sourceMediaKind: "audio" | "video";
@@ -24,11 +30,26 @@ export type DetailView = {
   failure: { code: string | null; summary: string | null } | null;
 };
 
+// Server-computed capabilities owned by
+// `add-transcript-curation-controls`. The page resolves these from the
+// workspace role + creator-attribution data so the client can render
+// the correct affordances (disabled/hidden controls, member vs admin
+// delete confirmation copy) without a second auth probe.
+export type CurationCapabilities = {
+  canCurate: boolean;
+  canDelete: boolean;
+  // When the user can't delete but we want to explain why (e.g. a
+  // member attempting to delete a retained record whose creator was
+  // deleted). Free-form text; the panel renders it verbatim.
+  deleteDisabledReason: string | null;
+};
+
 type Props = {
   workspaceSlug: string;
   transcriptId: string;
   initial: DetailView;
   canEditMarkdown: boolean;
+  curation: CurationCapabilities;
 };
 
 type FetchState = { kind: "idle" } | { kind: "refreshing" } | { kind: "error"; message: string };
@@ -39,7 +60,9 @@ type FetchState = { kind: "idle" } | { kind: "refreshing" } | { kind: "error"; m
 //   - a refresh button that re-fetches the detail payload
 //   - the edit-session entry / autosave / exit flow for markdown
 //     content when the caller's workspace role allows it
-export function TranscriptDetailView({ workspaceSlug, transcriptId, initial, canEditMarkdown }: Props) {
+//   - the curation panel: rename, tags, important toggle, and delete
+//     (owned by `add-transcript-curation-controls`)
+export function TranscriptDetailView({ workspaceSlug, transcriptId, initial, canEditMarkdown, curation }: Props) {
   const [state, setState] = useState<DetailView>(initial);
   const [fetchState, setFetchState] = useState<FetchState>({ kind: "idle" });
   const editSession = useEditSession({ workspaceSlug, transcriptId, canEdit: canEditMarkdown });
@@ -95,9 +118,21 @@ export function TranscriptDetailView({ workspaceSlug, transcriptId, initial, can
       <header className="flex flex-col gap-3">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <h1 className="text-2xl font-semibold">{state.displayTitle}</h1>
-          <StatusBadge status={state.status} />
+          <div className="flex items-center gap-2">
+            {state.isImportant ? <ImportantBadge /> : null}
+            <StatusBadge status={state.status} />
+          </div>
         </div>
         <DetailMetadata state={state} />
+        <TranscriptCurationPanel
+          workspaceSlug={workspaceSlug}
+          transcriptId={transcriptId}
+          snapshot={{ customTitle: state.customTitle, displayTitle: state.displayTitle, tags: state.tags, isImportant: state.isImportant }}
+          canCurate={curation.canCurate}
+          canDelete={curation.canDelete}
+          deleteDisabledReason={curation.deleteDisabledReason}
+          onCurationApplied={(updated) => setState((prev) => ({ ...prev, ...updated }))}
+        />
         <div className="flex flex-wrap items-center gap-2">
           <Button type="button" size="sm" variant="outline" onClick={refresh} disabled={fetchState.kind === "refreshing" || isEditing}>
             {fetchState.kind === "refreshing" ? "Refreshing…" : "Refresh"}
@@ -313,6 +348,21 @@ function DetailMetadata({ state }: { state: DetailView }) {
       ) : null}
       <dt>Notes</dt>
       <dd>{state.submittedWithNotes ? "Provided" : "None"}</dd>
+      {state.tags.length > 0 ? (
+        <>
+          <dt>Tags</dt>
+          <dd className="flex flex-wrap gap-1">
+            {state.tags.map((tag) => (
+              <span
+                key={tag}
+                className="inline-flex items-center rounded-sm border border-border/70 bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground"
+              >
+                {tag}
+              </span>
+            ))}
+          </dd>
+        </>
+      ) : null}
       <dt>Created</dt>
       <dd>{createdAt}</dd>
       <dt>Updated</dt>
@@ -324,6 +374,18 @@ function DetailMetadata({ state }: { state: DetailView }) {
         </>
       ) : null}
     </dl>
+  );
+}
+
+// Small decorative badge rendered next to the transcript title when
+// `isImportant` is true. Purely a read-side cue; the curation panel
+// toggles the flag. The visible "Important" text is the accessible
+// name so screen readers do not need an explicit label.
+function ImportantBadge() {
+  return (
+    <span className="inline-flex items-center gap-1 rounded-sm border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-700 dark:text-amber-300">
+      Important
+    </span>
   );
 }
 

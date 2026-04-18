@@ -11,14 +11,19 @@ import { sortColumnFor } from "./sort-options";
 // contents that the callee does not already see (transcript id and the
 // sort boundary are fine). Encoding is base64url of a compact JSON
 // object; callers treat the cursor as an opaque string.
+//
+// `value` encoding per column:
+//   - `created_at` / `updated_at`: ISO-8601 timestamp string.
+//   - `title`: lowercased effective title (`customTitle ?? title`).
+//   - `important_created`: composite `${flag}|${iso}` where flag is
+//     `1` (is_important=true) or `0` (is_important=false). This is
+//     owned by `add-transcript-curation-controls`.
+//   - `tag_sort_key`: `${flag}|${key}` where flag is `t` for a tagged
+//     row (key carries the sorted-tag-list string) or `u` for an
+//     untagged row (key is empty). Also owned by the curation change.
 
 export type CursorPayload = {
-  // Column the boundary value refers to. Prevents mixing a time cursor
-  // with a title cursor or vice versa.
   column: LibrarySortColumn;
-  // ISO-8601 timestamp for time columns, lowercased `title` string for
-  // title sorts. Kept as a string so the payload round-trips through
-  // JSON without losing precision.
   value: string;
   // Tie-breaker id. Keyset pagination is only stable if the sort keys
   // include a unique tail column; we always sort by transcript id as
@@ -68,13 +73,17 @@ function parseCursorJson(raw: string): CursorPayload | null {
     if (typeof column !== "string") return null;
     if (typeof value !== "string") return null;
     if (typeof id !== "string" || id.length === 0) return null;
-    if (column !== "created_at" && column !== "updated_at" && column !== "title") {
+    if (!isKnownSortColumn(column)) {
       return null;
     }
     return { column, value, id };
   } catch {
     return null;
   }
+}
+
+function isKnownSortColumn(column: string): column is LibrarySortColumn {
+  return column === "created_at" || column === "updated_at" || column === "title" || column === "important_created" || column === "tag_sort_key";
 }
 
 function toBase64Url(raw: string): string {

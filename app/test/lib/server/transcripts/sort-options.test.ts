@@ -40,6 +40,13 @@ describe("isTitleSort", () => {
     expect(isTitleSort("oldest_first")).toBe(false);
     expect(isTitleSort("recently_updated")).toBe(false);
   });
+
+  test("leaves the curation sort modes as non-title", () => {
+    expect(isTitleSort("important_first")).toBe(false);
+    expect(isTitleSort("important_last")).toBe(false);
+    expect(isTitleSort("tag_list_asc")).toBe(false);
+    expect(isTitleSort("tag_list_desc")).toBe(false);
+  });
 });
 
 describe("isAscendingSort", () => {
@@ -49,6 +56,16 @@ describe("isAscendingSort", () => {
     expect(isAscendingSort("newest_first")).toBe(false);
     expect(isAscendingSort("recently_updated")).toBe(false);
     expect(isAscendingSort("title_desc")).toBe(false);
+  });
+
+  test("classifies curation sort modes by direction", () => {
+    // `important_first` puts important rows first via DESC on the
+    // important flag; `important_last` uses ASC so plain rows lead.
+    expect(isAscendingSort("important_first")).toBe(false);
+    expect(isAscendingSort("important_last")).toBe(true);
+    // Tag sorts use ASC/DESC directly on the derived sort key.
+    expect(isAscendingSort("tag_list_asc")).toBe(true);
+    expect(isAscendingSort("tag_list_desc")).toBe(false);
   });
 
   test("throws for an unexpected sort mode", () => {
@@ -63,6 +80,16 @@ describe("sortColumnFor", () => {
     expect(sortColumnFor("recently_updated")).toBe("updated_at");
     expect(sortColumnFor("title_asc")).toBe("title");
     expect(sortColumnFor("title_desc")).toBe("title");
+  });
+
+  test("maps the curation sort modes to their composite cursor columns", () => {
+    // important_first/last share the composite `important_created`
+    // column so a cursor from one cannot be reused under the other.
+    expect(sortColumnFor("important_first")).toBe("important_created");
+    expect(sortColumnFor("important_last")).toBe("important_created");
+    // tag_list_asc/desc share `tag_sort_key` for the same reason.
+    expect(sortColumnFor("tag_list_asc")).toBe("tag_sort_key");
+    expect(sortColumnFor("tag_list_desc")).toBe("tag_sort_key");
   });
 
   test("throws for an unexpected sort mode", () => {

@@ -305,8 +305,36 @@ export const transcript = pgTable(
     // Canonical durable content produced on successful completion.
     // Left empty until the worker reaches the finalizing stage.
     title: text("title").notNull().default(""),
+    // User-owned rename override from `add-transcript-curation-controls`.
+    // `null` means no override - the effective display title falls back
+    // to the processing-owned `title`. The curation rule
+    // `customTitle ?? title` is evaluated through `deriveDisplayTitle`
+    // so every read site stays centralized on that helper.
+    customTitle: text("custom_title"),
     transcriptMarkdown: text("transcript_markdown").notNull().default(""),
     recapMarkdown: text("recap_markdown").notNull().default(""),
+    // Curation metadata from `add-transcript-curation-controls`.
+    //
+    // `tags` stores the normalized tag list the user has attached to
+    // this transcript. Tags are lower-cased, trimmed, and deduplicated
+    // before being persisted so the column is a canonical set and no
+    // downstream consumer has to re-normalize. Defaults to an empty
+    // array rather than null so tag filters can always operate on the
+    // column without coalescing.
+    //
+    // `tagSortKey` is a derived sort key built from the sorted
+    // normalized tag list (joined by a delimiter). It is stored so
+    // tag-list A-Z / Z-A sorts can use a single btree column and so
+    // untagged records naturally sort with PostgreSQL's default
+    // NULLS-LAST (asc) / NULLS-FIRST (desc) semantics. The curation
+    // repository is the only write site for this column so the
+    // "derived from tags" invariant stays local.
+    //
+    // `isImportant` flags a transcript as an important record for
+    // library sorting and filtering.
+    tags: text("tags").array().notNull().default(sql`ARRAY[]::text[]`),
+    tagSortKey: text("tag_sort_key"),
+    isImportant: boolean("is_important").notNull().default(false),
     // Privacy-safe metadata retained for later consultation and
     // management. `originalDurationSec` may be null when probing fails
     // before the transcript is published; `submittedWithNotes` records
@@ -333,14 +361,24 @@ export const transcript = pgTable(
     // library query can seek on `updated_at` without scanning every
     // workspace row.
     index("transcript_workspace_updated_idx").on(table.workspaceId, table.updatedAt),
-    // Covers the `displayTitle` A-Z / Z-A sort. `lower(title)` keeps the
-    // sort case-insensitive without requiring callers to normalize on
-    // the read path. `displayTitle` equals the processing-owned `title`
-    // until `add-transcript-curation-controls` introduces a custom
-    // override, at which point this index stays the physical backing for
-    // the default title sort while the effective-title rule layers on
-    // top.
-    index("transcript_workspace_title_ci_idx").on(table.workspaceId, sql`lower(${table.title})`),
+    // Covers the effective-title A-Z / Z-A sort. `displayTitle` equals
+    // `customTitle ?? title`; using `coalesce(custom_title, title)` with
+    // `lower(...)` produces the same case-insensitive key the read path
+    // derives through `deriveDisplayTitle`. The curation change owns
+    // the effective-title rule while keeping the library sort backed by
+    // a single btree column.
+    index("transcript_workspace_title_ci_idx").on(table.workspaceId, sql`lower(coalesce(${table.customTitle}, ${table.title}))`),
+    // Covers important-first / important-last library sorts and
+    // important-state filters added by `add-transcript-curation-controls`.
+    index("transcript_workspace_important_idx").on(table.workspaceId, table.isImportant),
+    // Covers tag-list A-Z / Z-A library sorts. `tagSortKey` is
+    // maintained by the curation repository from the sorted normalized
+    // tag list so the btree seek stays stable across edits.
+    index("transcript_workspace_tag_sort_key_idx").on(table.workspaceId, table.tagSortKey),
+    // GIN index for selected-tag membership filters. The library query
+    // uses the array-contains operator (`@>`) to match transcripts that
+    // include every selected tag.
+    index("transcript_tags_gin_idx").using("gin", table.tags),
   ],
 );
 

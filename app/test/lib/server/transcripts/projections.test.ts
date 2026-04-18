@@ -10,8 +10,12 @@ function makeRow(overrides: Partial<TranscriptRow> = {}): TranscriptRow {
     createdByUserId: "user_1",
     status: "completed",
     title: "Team sync",
+    customTitle: null,
     transcriptMarkdown: "# Transcript\n\nHello world.",
     recapMarkdown: "## Recap\n\n- Point one",
+    tags: [],
+    tagSortKey: null,
+    isImportant: false,
     sourceMediaKind: "audio",
     originalDurationSec: 1234.5,
     submittedWithNotes: true,
@@ -30,6 +34,9 @@ function makeSummary(overrides: Partial<TranscriptSummaryRow> = {}): TranscriptS
     workspaceId: "workspace_1",
     status: "completed",
     title: "Project kickoff",
+    customTitle: null,
+    tags: [],
+    isImportant: false,
     sourceMediaKind: "video",
     submittedWithNotes: false,
     createdAt: new Date("2026-04-05T08:00:00.000Z"),
@@ -47,6 +54,8 @@ describe("toLibraryItem", () => {
       workspaceId: "workspace_1",
       status: "completed",
       displayTitle: "Project kickoff",
+      tags: [],
+      isImportant: false,
       sourceMediaKind: "video",
       submittedWithNotes: false,
       createdAt: "2026-04-05T08:00:00.000Z",
@@ -58,6 +67,23 @@ describe("toLibraryItem", () => {
   test("falls back to the untitled placeholder for a blank processing title", () => {
     const row = makeSummary({ title: "   " });
     expect(toLibraryItem(row).displayTitle).toBe("Untitled transcript");
+  });
+
+  test("prefers customTitle over processing title when an override is set", () => {
+    const row = makeSummary({ title: "Project kickoff", customTitle: "Alpha kickoff" });
+    expect(toLibraryItem(row).displayTitle).toBe("Alpha kickoff");
+  });
+
+  test("falls back to processing title when customTitle is blank after trim", () => {
+    const row = makeSummary({ title: "Project kickoff", customTitle: "   " });
+    expect(toLibraryItem(row).displayTitle).toBe("Project kickoff");
+  });
+
+  test("passes through tags and isImportant from the summary row", () => {
+    const row = makeSummary({ tags: ["alpha", "beta"], isImportant: true });
+    const item = toLibraryItem(row);
+    expect(item.tags).toEqual(["alpha", "beta"]);
+    expect(item.isImportant).toBe(true);
   });
 
   test("preserves null completedAt (job still in flight)", () => {
@@ -75,6 +101,12 @@ describe("toLibraryItem", () => {
     expect(item).not.toHaveProperty("failureCode");
     expect(item).not.toHaveProperty("failureSummary");
   });
+
+  test("never leaks the raw customTitle (consumers read displayTitle)", () => {
+    const row = makeSummary({ customTitle: "Alpha kickoff" });
+    const item = toLibraryItem(row);
+    expect(item).not.toHaveProperty("customTitle");
+  });
 });
 
 describe("toDetailView", () => {
@@ -85,6 +117,9 @@ describe("toDetailView", () => {
       workspaceId: "workspace_1",
       status: "completed",
       displayTitle: "Team sync",
+      customTitle: null,
+      tags: [],
+      isImportant: false,
       transcriptMarkdown: "# Transcript\n\nHello world.",
       recapMarkdown: "## Recap\n\n- Point one",
       sourceMediaKind: "audio",
@@ -95,6 +130,20 @@ describe("toDetailView", () => {
       completedAt: "2026-04-03T12:00:00.000Z",
       failure: null,
     });
+  });
+
+  test("exposes customTitle on the detail view so the rename control can pre-fill", () => {
+    const row = makeRow({ customTitle: "Alpha kickoff" });
+    const detail = toDetailView(row);
+    expect(detail.customTitle).toBe("Alpha kickoff");
+    expect(detail.displayTitle).toBe("Alpha kickoff");
+  });
+
+  test("exposes tags and isImportant", () => {
+    const row = makeRow({ tags: ["urgent", "review"], isImportant: true });
+    const detail = toDetailView(row);
+    expect(detail.tags).toEqual(["urgent", "review"]);
+    expect(detail.isImportant).toBe(true);
   });
 
   test("returns a failure summary payload when the transcript has terminated in failure", () => {

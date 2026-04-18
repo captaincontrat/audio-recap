@@ -6,6 +6,7 @@ import {
   LIBRARY_DEFAULT_PAGE_SIZE,
   LIBRARY_MAX_PAGE_SIZE,
   LIBRARY_MAX_SEARCH_LENGTH,
+  LIBRARY_MAX_TAG_FILTER_COUNT,
   LIBRARY_STATUS_FILTER_OPTIONS,
   LibraryQueryParseError,
   parseLibraryQueryOptions,
@@ -19,27 +20,43 @@ describe("parseLibraryQueryOptions", () => {
       status: null,
       cursor: null,
       limit: LIBRARY_DEFAULT_PAGE_SIZE,
+      important: null,
+      tags: [],
     });
 
-    expect(parseLibraryQueryOptions({ search: null, sort: null, status: null, cursor: null, limit: null })).toEqual({
+    expect(parseLibraryQueryOptions({ search: null, sort: null, status: null, cursor: null, limit: null, important: null, tags: null })).toEqual({
       search: null,
       sort: "newest_first",
       status: null,
       cursor: null,
       limit: LIBRARY_DEFAULT_PAGE_SIZE,
+      important: null,
+      tags: [],
     });
 
-    expect(parseLibraryQueryOptions({ search: "", sort: "", status: "", cursor: "", limit: "" })).toEqual({
+    expect(parseLibraryQueryOptions({ search: "", sort: "", status: "", cursor: "", limit: "", important: "", tags: [] })).toEqual({
       search: null,
       sort: "newest_first",
       status: null,
       cursor: null,
       limit: LIBRARY_DEFAULT_PAGE_SIZE,
+      important: null,
+      tags: [],
     });
   });
 
   test("accepts every known sort option", () => {
-    const sorts = ["newest_first", "oldest_first", "recently_updated", "title_asc", "title_desc"] as const;
+    const sorts = [
+      "newest_first",
+      "oldest_first",
+      "recently_updated",
+      "title_asc",
+      "title_desc",
+      "important_first",
+      "important_last",
+      "tag_list_asc",
+      "tag_list_desc",
+    ] as const;
     for (const sort of sorts) {
       expect(parseLibraryQueryOptions({ sort }).sort).toBe(sort);
     }
@@ -144,6 +161,58 @@ describe("parseLibraryQueryOptions", () => {
     expect(error.message).toBe("too big");
     expect(error.name).toBe("LibraryQueryParseError");
     expect(error.code).toBe("library_query_invalid");
+  });
+
+  test("parses the important filter as a boolean or null", () => {
+    expect(parseLibraryQueryOptions({ important: "true" }).important).toBe(true);
+    expect(parseLibraryQueryOptions({ important: "false" }).important).toBe(false);
+    expect(parseLibraryQueryOptions({ important: null }).important).toBeNull();
+    expect(parseLibraryQueryOptions({ important: "" }).important).toBeNull();
+    expect(parseLibraryQueryOptions({}).important).toBeNull();
+  });
+
+  test("throws invalid_important for unknown important values", () => {
+    try {
+      parseLibraryQueryOptions({ important: "yes" });
+      throw new Error("expected parseLibraryQueryOptions to throw");
+    } catch (error) {
+      expect(error).toBeInstanceOf(LibraryQueryParseError);
+      expect((error as LibraryQueryParseError).reason).toBe("invalid_important");
+    }
+  });
+
+  test("normalizes tag filters: trim, lowercase, deduplicate", () => {
+    expect(parseLibraryQueryOptions({ tags: "Kickoff" }).tags).toEqual(["kickoff"]);
+    expect(parseLibraryQueryOptions({ tags: ["Kickoff", "kickoff ", "  PLANNING"] }).tags).toEqual(["kickoff", "planning"]);
+    expect(parseLibraryQueryOptions({ tags: [] }).tags).toEqual([]);
+  });
+
+  test("rejects tag filter with empty entries, over-long tags, or non-string values", () => {
+    const assertInvalid = (raw: { tags: unknown }) => {
+      try {
+        parseLibraryQueryOptions(raw as never);
+        throw new Error("expected parseLibraryQueryOptions to throw");
+      } catch (error) {
+        expect(error).toBeInstanceOf(LibraryQueryParseError);
+        expect((error as LibraryQueryParseError).reason).toBe("invalid_tags");
+      }
+    };
+
+    assertInvalid({ tags: [""] });
+    assertInvalid({ tags: ["   "] });
+    assertInvalid({ tags: [123] });
+    assertInvalid({ tags: ["x".repeat(33)] });
+  });
+
+  test("rejects tag filter lists exceeding the filter cap", () => {
+    const many = Array.from({ length: LIBRARY_MAX_TAG_FILTER_COUNT + 1 }, (_, i) => `tag-${i}`);
+    try {
+      parseLibraryQueryOptions({ tags: many });
+      throw new Error("expected parseLibraryQueryOptions to throw");
+    } catch (error) {
+      expect(error).toBeInstanceOf(LibraryQueryParseError);
+      expect((error as LibraryQueryParseError).reason).toBe("invalid_tags");
+    }
   });
 });
 

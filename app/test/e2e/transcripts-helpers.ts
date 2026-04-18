@@ -6,13 +6,18 @@ export type SeedTranscriptSpec = {
   id?: string;
   status?: TranscriptStatus;
   title?: string;
+  customTitle?: string | null;
   transcriptMarkdown?: string;
   recapMarkdown?: string;
+  tags?: string[];
+  tagSortKey?: string | null;
+  isImportant?: boolean;
   sourceMediaKind?: TranscriptSourceMediaKind;
   originalDurationSec?: number | null;
   submittedWithNotes?: boolean;
   failureCode?: TranscriptFailureCode | null;
   failureSummary?: string | null;
+  createdByUserEmail?: string | null;
   createdAt?: string;
   updatedAt?: string;
   completedAt?: string | null;
@@ -49,6 +54,8 @@ export type LibraryApiResponse = {
     workspaceId: string;
     status: TranscriptStatus;
     displayTitle: string;
+    tags: string[];
+    isImportant: boolean;
     sourceMediaKind: TranscriptSourceMediaKind;
     submittedWithNotes: boolean;
     createdAt: string;
@@ -69,6 +76,9 @@ export type DetailApiResponse = {
     workspaceId: string;
     status: TranscriptStatus;
     displayTitle: string;
+    customTitle: string | null;
+    tags: string[];
+    isImportant: boolean;
     transcriptMarkdown: string;
     recapMarkdown: string;
     sourceMediaKind: TranscriptSourceMediaKind;

@@ -29,6 +29,52 @@ describe("encodeCursor", () => {
     expect(decodeCursor(token, "title_asc")).toEqual(payload);
     expect(decodeCursor(token, "title_desc")).toEqual(payload);
   });
+
+  test("round-trips the composite important_created cursor for both directions", () => {
+    // `${flag}|${iso}` — flag is `1` for important rows and `0` for
+    // plain ones. Owned by `add-transcript-curation-controls`.
+    const payload: CursorPayload = {
+      column: "important_created",
+      value: "1|2026-04-05T10:00:00.000Z",
+      id: "transcript_imp_boundary",
+    };
+    const token = encodeCursor(payload);
+    expect(decodeCursor(token, "important_first")).toEqual(payload);
+    expect(decodeCursor(token, "important_last")).toEqual(payload);
+  });
+
+  test("round-trips the composite tag_sort_key cursor for tagged and untagged boundary rows", () => {
+    // Tagged boundary (`t|<sorted-tag-list>`).
+    const tagged: CursorPayload = {
+      column: "tag_sort_key",
+      value: "t|alpha\u0001zulu",
+      id: "transcript_tagged_boundary",
+    };
+    const taggedToken = encodeCursor(tagged);
+    expect(decodeCursor(taggedToken, "tag_list_asc")).toEqual(tagged);
+    expect(decodeCursor(taggedToken, "tag_list_desc")).toEqual(tagged);
+
+    // Untagged boundary (`u|`) so the paginator knows to sit in the
+    // NULL-group when resuming.
+    const untagged: CursorPayload = {
+      column: "tag_sort_key",
+      value: "u|",
+      id: "transcript_untagged_boundary",
+    };
+    const untaggedToken = encodeCursor(untagged);
+    expect(decodeCursor(untaggedToken, "tag_list_asc")).toEqual(untagged);
+    expect(decodeCursor(untaggedToken, "tag_list_desc")).toEqual(untagged);
+  });
+
+  test("refuses to decode a curation cursor under a mismatched sort", () => {
+    const importantToken = encodeCursor({ column: "important_created", value: "1|2026-04-01T00:00:00.000Z", id: "id_imp" });
+    expect(() => decodeCursor(importantToken, "newest_first")).toThrowError(/does not match the active sort/);
+    expect(() => decodeCursor(importantToken, "tag_list_asc")).toThrowError(/does not match the active sort/);
+
+    const tagToken = encodeCursor({ column: "tag_sort_key", value: "t|alpha", id: "id_tag" });
+    expect(() => decodeCursor(tagToken, "title_asc")).toThrowError(/does not match the active sort/);
+    expect(() => decodeCursor(tagToken, "important_first")).toThrowError(/does not match the active sort/);
+  });
 });
 
 describe("decodeCursor", () => {
