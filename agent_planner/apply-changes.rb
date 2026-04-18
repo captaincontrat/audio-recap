@@ -45,7 +45,7 @@ module AgentPlanner
     end
 
     def process_change(change)
-      AgentPlanner.emit_log("[#{change}] starting apply/sync/archive/commit workflow")
+      AgentPlanner.emit_log("[#{change}] starting apply/verify/fix/sync/archive/commit workflow")
 
       AgentPlanner.start_session(
         "/openspec-apply-change #{change}",
