@@ -5,10 +5,10 @@
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
-    "dev:worker": "APP_RUNTIME=worker tsx watch worker/index.ts",
+    "dev:worker": "NODE_OPTIONS='--conditions=react-server' APP_RUNTIME=worker tsx watch worker/index.ts",
     "build": "next build",
     "start": "next start",
-    "worker": "APP_RUNTIME=worker tsx worker/index.ts",
+    "worker": "NODE_OPTIONS='--conditions=react-server' APP_RUNTIME=worker tsx worker/index.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",

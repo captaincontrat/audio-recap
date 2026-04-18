@@ -1,5 +1,13 @@
 import "dotenv/config";
 
+// The worker reuses `app/lib/server/**` modules, many of which start
+// with `import "server-only"`. Outside Next.js the `server-only`
+// package throws unless the `react-server` export condition is
+// active, so the `worker` / `dev:worker` scripts run tsx with
+// `NODE_OPTIONS='--conditions=react-server'`. Vitest applies the
+// equivalent escape hatch via the alias declared in
+// `vitest.config.mts`.
+
 import { closeDb } from "@/lib/server/db/client";
 import { childLogger } from "@/lib/server/logger";
 import { closeRedisConnection } from "@/lib/server/queue/connection";
