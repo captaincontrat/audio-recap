@@ -71,6 +71,13 @@
       "when": 1776481808353,
       "tag": "0009_add_account_security_hardening",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1776483370088,
+      "tag": "0010_add_account_closure_retention",
+      "breakpoints": true
     }
   ]
 }

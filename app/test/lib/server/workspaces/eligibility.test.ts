@@ -10,6 +10,14 @@ describe("hasNormalAuthenticatedAccess", () => {
   test("returns false when the user account has been removed", () => {
     expect(hasNormalAuthenticatedAccess({ userExists: false })).toBe(false);
   });
+
+  test("returns false when the account is in the closed retention state", () => {
+    expect(hasNormalAuthenticatedAccess({ userExists: true, closedAt: new Date("2026-04-01T00:00:00Z") })).toBe(false);
+  });
+
+  test("treats explicit null closedAt as still active", () => {
+    expect(hasNormalAuthenticatedAccess({ userExists: true, closedAt: null })).toBe(true);
+  });
 });
 
 describe("isEligibleActiveAdmin", () => {
@@ -19,6 +27,10 @@ describe("isEligibleActiveAdmin", () => {
 
   test("admin memberships on missing accounts do not count", () => {
     expect(isEligibleActiveAdmin({ role: "admin", account: { userExists: false } })).toBe(false);
+  });
+
+  test("admin memberships on closed accounts do not count while the row still exists", () => {
+    expect(isEligibleActiveAdmin({ role: "admin", account: { userExists: true, closedAt: new Date("2026-04-01T00:00:00Z") } })).toBe(false);
   });
 
   test("member memberships never count regardless of account state", () => {

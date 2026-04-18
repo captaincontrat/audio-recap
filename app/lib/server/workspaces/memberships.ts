@@ -25,14 +25,16 @@ export async function getMembershipRole(args: { workspaceId: string; userId: str
 
 // Count eligible active admins for a workspace by joining memberships with
 // the user table and applying the shared `eligibility` predicate. The DB
-// join is the single place where additional account-access columns (future
-// `closed_at`, `suspended_at`) need to flow in when later capabilities
-// extend account state.
+// join is the single place where additional account-access columns flow
+// in; `closedAt` (added by `add-account-closure-retention`) short-circuits
+// eligibility for retained-but-closed accounts before they are eventually
+// permanently deleted.
 export async function countEligibleActiveAdmins(workspaceId: string): Promise<number> {
   const rows = await getDb()
     .select({
       role: workspaceMembership.role,
       userId: user.id,
+      closedAt: user.closedAt,
     })
     .from(workspaceMembership)
     .innerJoin(user, eq(user.id, workspaceMembership.userId))
@@ -40,7 +42,7 @@ export async function countEligibleActiveAdmins(workspaceId: string): Promise<nu
   return countFromInputs(
     rows.map((row) => ({
       role: row.role,
-      account: { userExists: row.userId !== null && row.userId !== undefined },
+      account: { userExists: row.userId !== null && row.userId !== undefined, closedAt: row.closedAt },
     })),
   );
 }
@@ -90,13 +92,14 @@ export async function describeAdminMemberships(workspaceId: string): Promise<
     .select({
       membership: workspaceMembership,
       userId: user.id,
+      closedAt: user.closedAt,
     })
     .from(workspaceMembership)
     .innerJoin(user, eq(user.id, workspaceMembership.userId))
     .where(and(eq(workspaceMembership.workspaceId, workspaceId), eq(workspaceMembership.role, "admin")));
   return rows.map((row) => ({
     membership: row.membership,
-    isEligible: isEligibleActiveAdmin({ role: row.membership.role, account: { userExists: Boolean(row.userId) } }),
+    isEligible: isEligibleActiveAdmin({ role: row.membership.role, account: { userExists: Boolean(row.userId), closedAt: row.closedAt } }),
   }));
 }
 

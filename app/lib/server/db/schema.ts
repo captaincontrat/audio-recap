@@ -26,10 +26,27 @@ export const user = pgTable(
     // `twoFactor` plugin's sign-in interception hook: when `false`, primary
     // sign-in completes as before and no challenge is issued.
     twoFactorEnabled: boolean("two_factor_enabled").notNull().default(false),
+    // Account-closure retention state owned by `add-account-closure-retention`:
+    // - `closed_at` is the moment the user completed the closure flow. Null
+    //   means the account is currently active; a non-null value places the
+    //   account in the retained inactive state and starts the 30-day
+    //   self-service reactivation window.
+    // - `scheduled_delete_at` is the moment that window ends. Set together
+    //   with `closed_at` and cleared on reactivation. The closure sweep job
+    //   uses it to decide when a closed account becomes eligible for
+    //   permanent deletion.
+    // Both columns remain null for the active-account default; the partial
+    // index on `scheduled_delete_at` keeps the sweep query lean once closed
+    // accounts accumulate.
+    closedAt: timestamp("closed_at", { withTimezone: true, mode: "date" }),
+    scheduledDeleteAt: timestamp("scheduled_delete_at", { withTimezone: true, mode: "date" }),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
   },
-  (table) => [uniqueIndex("user_email_unique").on(table.email)],
+  (table) => [
+    uniqueIndex("user_email_unique").on(table.email),
+    index("user_scheduled_delete_idx").on(table.scheduledDeleteAt).where(sql`${table.scheduledDeleteAt} IS NOT NULL`),
+  ],
 );
 
 export const session = pgTable("session", {

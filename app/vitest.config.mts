@@ -74,6 +74,16 @@ export default defineConfig({
         "lib/server/workspaces/invitation-archive-effect.ts",
         "lib/server/workspaces/bootstrap.ts",
         "lib/server/workspaces/index.ts",
+        // `account-closure-retention` DB-touching modules. Pure decision
+        // logic (closure state, closure eligibility, attribution, error
+        // classes) lives in sibling modules that are unit-tested directly;
+        // the orchestration here (DB writes, session revocation, permanent
+        // deletion sweep) is exercised through e2e flows covering the
+        // close / reactivate / expire pipeline.
+        "lib/server/accounts/closure.ts",
+        "lib/server/accounts/close-action.ts",
+        "lib/server/accounts/reactivate-action.ts",
+        "lib/server/accounts/index.ts",
         // Meeting-import-processing modules that touch the Drizzle
         // client, BullMQ queue, or S3 transient store. Pure decision
         // logic (submission decisions, retry policy, stage plan,

@@ -44,6 +44,9 @@ export default async function TranscriptDetailPage({ params }: { params: Promise
   if (auth.status === "unverified") {
     redirect(auth.redirectTo);
   }
+  if (auth.status === "closed") {
+    redirect(auth.redirectTo);
+  }
 
   const { slug, transcriptId } = await params;
 

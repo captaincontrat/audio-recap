@@ -31,6 +31,7 @@ async function loadAdminMemberships(workspaceId: string): Promise<AdminAccountRo
       userId: workspaceMembership.userId,
       role: workspaceMembership.role,
       userRowId: user.id,
+      userClosedAt: user.closedAt,
     })
     .from(workspaceMembership)
     .innerJoin(user, eq(user.id, workspaceMembership.userId))
@@ -40,6 +41,7 @@ async function loadAdminMemberships(workspaceId: string): Promise<AdminAccountRo
     userId: row.userId,
     role: row.role,
     userExists: Boolean(row.userRowId),
+    closedAt: row.userClosedAt,
   }));
 }
 

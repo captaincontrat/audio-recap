@@ -18,6 +18,7 @@ function admin(partial: Partial<AdminAccountRow> & { membershipId: string }): Ad
     userId: `u_${partial.membershipId}`,
     role: "admin",
     userExists: true,
+    closedAt: null,
     ...partial,
   };
 }

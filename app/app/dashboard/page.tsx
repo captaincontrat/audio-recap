@@ -20,6 +20,9 @@ export default async function DashboardPage() {
   if (outcome.status === "unverified") {
     redirect(outcome.redirectTo);
   }
+  if (outcome.status === "closed") {
+    redirect(outcome.redirectTo);
+  }
 
   return (
     <main className="mx-auto flex min-h-svh max-w-2xl flex-col justify-center gap-6 p-6">
