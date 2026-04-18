@@ -63,6 +63,14 @@ export {
 } from "./status-read";
 
 export {
+  type ListUploadManagerRehydrationItemsArgs,
+  listUploadManagerRehydrationItems,
+  toUploadManagerRehydrationItem,
+  type UploadManagerRehydrationItem,
+  type UploadManagerRehydrationRow,
+} from "./upload-manager-rehydration";
+
+export {
   type BrowserNormalizationOutcome,
   canRoleCreateTranscripts,
   evaluateSubmission,

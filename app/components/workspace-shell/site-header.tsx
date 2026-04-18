@@ -6,11 +6,12 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Brand } from "./brand";
 import { SearchTrigger } from "./search-trigger";
 import { ThemeToggle } from "./theme-toggle";
+import { UploadHeaderControl } from "./upload-manager/header-upload-control";
 
 // Thin header ribbon (`add-workspace-app-shell`, task 3.1):
 // Left:  brand mark/wordmark + sidebar collapse trigger
-// Right: search icon, theme toggle, user menu lives in the sidebar
-//        footer per the design — the header keeps three slots only.
+// Right: search icon, upload control, theme toggle, user menu lives
+//        in the sidebar footer per the design.
 // Center stays intentionally empty so workspace identity reads as
 // "Summitdown / <workspace name>" without competing chrome.
 //
@@ -31,6 +32,7 @@ export function SiteHeader() {
         <Brand />
         <div className="flex-1" aria-hidden="true" />
         <SearchTrigger />
+        <UploadHeaderControl />
         <ThemeToggle />
       </div>
     </header>

@@ -7,54 +7,93 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { MeetingSubmissionError, submitMeeting } from "@/lib/client/meeting-submission";
+import { formatBytes } from "@/components/workspace-shell/upload-manager/format";
+import { useUploadManagerStore, useUploadManagerWorkspaceSlug } from "@/components/workspace-shell/upload-manager/provider";
+import { runSubmissionForDraft } from "@/components/workspace-shell/upload-manager/submission-runner";
 
 type Props = {
-  workspaceSlug: string;
   normalizationPolicy: "optional" | "required";
 };
 
 // Submission form for one meeting media file plus optional markdown
-// notes. Keeps the multi-step handoff with the server (prepare →
-// upload → finalize) inside the `submitMeeting` helper so this
-// component only coordinates the React state and surfaces
-// progress/errors.
-export function NewMeetingForm({ workspaceSlug, normalizationPolicy }: Props) {
+// notes. The form renders inside the workspace shell, so the upload
+// manager's store and submission runner are mounted above. We funnel
+// the dedicated form's submit through the same draft → run pipeline
+// the shell drop overlay and header upload control use; the only
+// difference is the dedicated form redirects to the meeting status
+// page after `submitMeeting()` returns a transcript id, while the
+// other entry points let the user keep working from the tray.
+//
+// The redirect behavior is a hard requirement of the dedicated page
+// (the proposal calls it out explicitly: the page MUST keep its
+// existing redirect to the dedicated status page). The shared store
+// still tracks the item in the background so the tray reflects the
+// upload alongside any other in-flight work.
+export function NewMeetingForm({ normalizationPolicy }: Props) {
   const router = useRouter();
+  const workspaceSlug = useUploadManagerWorkspaceSlug();
+  const store = useUploadManagerStore();
   const [file, setFile] = useState<File | null>(null);
   const [notes, setNotes] = useState("");
   const [phase, setPhase] = useState<"idle" | "submitting" | "done">("idle");
   const [progressMessage, setProgressMessage] = useState<string | null>(null);
-  const [errorCode, setErrorCode] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!file || phase === "submitting") return;
 
-    setErrorCode(null);
     setErrorMessage(null);
     setPhase("submitting");
     setProgressMessage("Preparing submission…");
 
-    try {
-      const result = await submitMeeting({
-        workspaceSlug,
-        file,
-        ...(notes.trim().length > 0 ? { notesText: notes } : {}),
-      });
-      setPhase("done");
-      setProgressMessage("Submission accepted. Redirecting…");
-      router.push(`/w/${encodeURIComponent(workspaceSlug)}/meetings/${encodeURIComponent(result.transcriptId)}`);
-    } catch (err) {
+    const draftId = store.addDraft({ workspaceSlug, file });
+    if (notes.trim().length > 0) {
+      store.updateDraftNotes(draftId, notes);
+    }
+    const draft = store.findItem(draftId);
+    if (!draft) {
       setPhase("idle");
       setProgressMessage(null);
-      if (err instanceof MeetingSubmissionError) {
-        setErrorCode(err.code);
-        setErrorMessage(mapErrorMessage(err.code, err.message, normalizationPolicy));
-      } else {
-        setErrorCode("unexpected_error");
-        setErrorMessage("Something went wrong submitting your meeting. Please try again.");
+      setErrorMessage("Could not stage the upload. Please retry.");
+      return;
+    }
+
+    // The dedicated form keeps its policy-aware override for
+    // `normalization_required_failed` so the message guides the user
+    // toward Chrome/Edge or asking an admin to relax the policy. The
+    // tray surfaces the shared, policy-agnostic copy from
+    // `describeSubmissionErrorCode`; we just inject the override here
+    // so the local-error row in the tray matches what we show under
+    // the form.
+    const result = await runSubmissionForDraft(store, draft, {
+      errorMessageOverride: (code, fallback) => {
+        if (code === "normalization_required_failed" && normalizationPolicy === "required") {
+          return "This workspace requires browser-side MP3 conversion, which is not available in your browser. Try Chrome or Edge, or ask an admin to relax the policy.";
+        }
+        return fallback;
+      },
+    });
+
+    switch (result.kind) {
+      case "submitted":
+        setPhase("done");
+        setProgressMessage("Submission accepted. Redirecting…");
+        router.push(`/w/${encodeURIComponent(workspaceSlug)}/meetings/${encodeURIComponent(result.transcriptId)}`);
+        return;
+      case "failed":
+        setPhase("idle");
+        setProgressMessage(null);
+        setErrorMessage(result.message);
+        return;
+      case "rejected":
+        setPhase("idle");
+        setProgressMessage(null);
+        setErrorMessage("Could not stage the upload. Please retry.");
+        return;
+      default: {
+        const exhaustive: never = result;
+        throw new Error(`Unhandled submission result: ${JSON.stringify(exhaustive)}`);
       }
     }
   }
@@ -62,8 +101,7 @@ export function NewMeetingForm({ workspaceSlug, normalizationPolicy }: Props) {
   function onFileChange(event: ChangeEvent<HTMLInputElement>) {
     const next = event.target.files?.[0] ?? null;
     setFile(next);
-    if (errorCode) {
-      setErrorCode(null);
+    if (errorMessage) {
       setErrorMessage(null);
     }
   }
@@ -120,45 +158,4 @@ export function NewMeetingForm({ workspaceSlug, normalizationPolicy }: Props) {
       </div>
     </form>
   );
-}
-
-function formatBytes(size: number): string {
-  if (size < 1024) return `${size} B`;
-  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
-  if (size < 1024 * 1024 * 1024) return `${(size / (1024 * 1024)).toFixed(1)} MB`;
-  return `${(size / (1024 * 1024 * 1024)).toFixed(2)} GB`;
-}
-
-function mapErrorMessage(code: string, fallback: string, policy: "optional" | "required"): string {
-  switch (code) {
-    case "access_denied":
-      return "You do not have access to submit meetings in this workspace.";
-    case "role_not_authorized":
-      return "Your role in this workspace does not allow submitting meetings.";
-    case "workspace_archived":
-      return "This workspace is archived and cannot accept new submissions.";
-    case "media_too_large":
-      return "This file is larger than the 500 MB per-submission limit.";
-    case "media_unsupported":
-      return "Only audio or video files are supported.";
-    case "notes_too_long":
-      return "Meeting notes exceed the 64 KB limit.";
-    case "normalization_required_failed":
-      return policy === "required"
-        ? "This workspace requires browser-side MP3 conversion, which is not available in your browser. Try Chrome or Edge, or ask an admin to relax the policy."
-        : fallback;
-    case "media_missing":
-      return "The upload did not complete. Please retry.";
-    case "plan_token_expired":
-      return "The upload session expired. Please start again.";
-    case "plan_token_invalid_signature":
-    case "plan_token_malformed":
-    case "plan_token_user_mismatch":
-    case "plan_token_version_mismatch":
-      return "The upload session is no longer valid. Please start again.";
-    case "upload_failed":
-      return "Upload to transient storage failed. Please retry in a moment.";
-    default:
-      return fallback;
-  }
 }

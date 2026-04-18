@@ -62,10 +62,22 @@ export class MeetingSubmissionError extends Error {
   }
 }
 
+// Optional progress callbacks the upload manager wires up so the tray
+// can show "preparing", "uploading", or "finalizing" as the helper
+// walks through each step. The dedicated meeting form ignores them
+// — it only cares about the final outcome — but the manager surfaces
+// them as the per-item local submission phase.
+export type SubmissionPhaseCallbacks = {
+  onPreparing?: () => void;
+  onUploading?: () => void;
+  onFinalizing?: () => void;
+};
+
 export type SubmitMeetingInputs = {
   workspaceSlug: string;
   file: File;
   notesText?: string;
+  callbacks?: SubmissionPhaseCallbacks;
 };
 
 export type SubmitMeetingResult = {
@@ -91,6 +103,8 @@ export async function submitMeeting(inputs: SubmitMeetingInputs): Promise<Submit
     throw new MeetingSubmissionError("media_unsupported", "Only audio or video files are supported.");
   }
 
+  inputs.callbacks?.onPreparing?.();
+
   const normalization = await normalizeMediaForSubmission({ file: inputs.file, kind: mediaKind });
   const uploadFile = normalization.file;
   const uploadContentType = uploadFile.type || inputs.file.type;
@@ -104,11 +118,15 @@ export async function submitMeeting(inputs: SubmitMeetingInputs): Promise<Submit
     normalization: normalization.outcome,
   });
 
+  inputs.callbacks?.onUploading?.();
+
   await uploadToPresignedUrl(prepare.uploads.media, uploadFile);
   if (prepare.uploads.notes && notes) {
     const notesBlob = new Blob([notes], { type: "text/markdown; charset=utf-8" });
     await uploadToPresignedUrl(prepare.uploads.notes, notesBlob);
   }
+
+  inputs.callbacks?.onFinalizing?.();
 
   const finalize = await postJson<FinalizeResponse>(`/api/workspaces/${encodeURIComponent(inputs.workspaceSlug)}/meetings`, {
     planToken: prepare.planToken,

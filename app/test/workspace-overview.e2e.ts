@@ -118,17 +118,31 @@ test("library highlights link out to the full transcripts library", async ({ pag
   await expect(page.getByRole("heading", { level: 1 })).toContainText("Transcripts");
 });
 
-test("start-upload CTA routes to the dedicated meeting submission surface", async ({ page, request }) => {
-  // Pin down the spec scenario "Start-upload CTA routes to the
-  // dedicated submission surface". Both CTA renderings must land on
-  // `/w/<slug>/meetings/new`: the empty-state CTA when the workspace
-  // has no transcripts, and the header CTA once the workspace has
-  // activity to render.
+test("start-upload CTA opens the shell drop-then-confirm handoff instead of navigating (task 6.2 / 7.6)", async ({ page, request }) => {
+  // Pin down the spec scenario "Overview start-upload CTA opens the
+  // shell drop-then-confirm handoff": the CTA stays on the overview
+  // page (no navigation), surfaces the upload manager tray with the
+  // selected file as a draft, and lets the user cancel without ever
+  // queueing transcript work. The dedicated submission page is still
+  // reachable through direct links — we verify that elsewhere.
   const user = await signInFreshUser(page, request, "overview-cta-nav");
 
   await page.goto(`/w/${user.workspaceSlug}`);
-  await page.getByTestId("overview-empty-start-upload-cta").click();
-  await expect(page).toHaveURL(`/w/${user.workspaceSlug}/meetings/new`);
+  const overviewUrl = `/w/${user.workspaceSlug}`;
+
+  // Empty-state CTA flavour: file selection becomes a draft tray
+  // item and the URL stays put.
+  await page.setInputFiles('[data-testid="overview-empty-start-upload-cta-input"]', {
+    name: "kickoff.mp3",
+    mimeType: "audio/mpeg",
+    buffer: Buffer.from("audio-bytes"),
+  });
+  await expect(page).toHaveURL(overviewUrl);
+  await expect(page.getByTestId("workspace-shell-upload-manager")).toBeVisible();
+  await expect(page.getByTestId("workspace-shell-upload-item").first()).toContainText("kickoff.mp3");
+  await expect(page.getByTestId("workspace-shell-upload-item").first()).toHaveAttribute("data-phase", "draft");
+  await page.getByTestId("workspace-shell-upload-item-cancel").click();
+  await expect(page.getByTestId("workspace-shell-upload-manager")).toHaveCount(0);
 
   await seedTranscripts(request, {
     workspaceSlug: user.workspaceSlug,
@@ -137,8 +151,13 @@ test("start-upload CTA routes to the dedicated meeting submission surface", asyn
   });
 
   await page.goto(`/w/${user.workspaceSlug}`);
-  await page.getByTestId("overview-start-upload-cta").click();
-  await expect(page).toHaveURL(`/w/${user.workspaceSlug}/meetings/new`);
+  await page.setInputFiles('[data-testid="overview-start-upload-cta-input"]', {
+    name: "review.mp3",
+    mimeType: "audio/mpeg",
+    buffer: Buffer.from("audio-bytes"),
+  });
+  await expect(page).toHaveURL(overviewUrl);
+  await expect(page.getByTestId("workspace-shell-upload-item").first()).toContainText("review.mp3");
 });
 
 test("read_only viewers see the overview without any upload CTA", async ({ page, request }) => {

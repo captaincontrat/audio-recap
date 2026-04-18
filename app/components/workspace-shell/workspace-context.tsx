@@ -2,6 +2,8 @@
 
 import { createContext, useContext } from "react";
 
+import type { WorkspaceRole } from "@/lib/server/db/schema";
+
 // Shape of the membership entries the workspace switcher renders. The
 // shell assembles these on the server (see `workspace-shell.tsx`) so
 // the client never re-fetches the membership list on intra-shell
@@ -23,10 +25,15 @@ export type WorkspaceShellUser = {
   image: string | null;
 };
 
+// The viewer's role in the *current* workspace. The shell uses this to
+// gate write affordances — most prominently the upload entry points,
+// which the design requires to be greyed out for `read_only` members
+// and on archived workspaces.
 export type WorkspaceShellContextValue = {
   workspace: WorkspaceShellWorkspace;
   memberships: WorkspaceShellMembership[];
   user: WorkspaceShellUser;
+  currentRole: WorkspaceRole;
 };
 
 const WorkspaceShellContext = createContext<WorkspaceShellContextValue | null>(null);

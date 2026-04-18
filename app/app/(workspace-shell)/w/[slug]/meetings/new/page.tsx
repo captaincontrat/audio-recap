@@ -73,7 +73,7 @@ export default async function NewMeetingPage({ params }: { params: Promise<{ slu
         </p>
       </header>
       <section className="rounded-md border border-border/60 p-5">
-        <NewMeetingForm workspaceSlug={slug} normalizationPolicy={policy} />
+        <NewMeetingForm normalizationPolicy={policy} />
       </section>
     </div>
   );

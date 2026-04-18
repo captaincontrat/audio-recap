@@ -4,6 +4,7 @@ import { notFound, redirect } from "next/navigation";
 import { WorkspaceShell } from "@/components/workspace-shell/workspace-shell";
 import { type WorkspaceShellContextValue, type WorkspaceShellMembership } from "@/components/workspace-shell/workspace-context";
 import { evaluateProtectedRoute } from "@/lib/auth/guards";
+import { listUploadManagerRehydrationItems, type UploadManagerRehydrationItem } from "@/lib/server/meetings";
 import { countTranscriptsForWorkspace } from "@/lib/server/transcripts";
 import { listAccessibleWorkspacesForUser } from "@/lib/server/workspaces/memberships";
 import { resolveWorkspaceContextFromSlug } from "@/lib/server/workspaces/resolver";
@@ -52,6 +53,12 @@ export default async function WorkspaceShellLayout({ children, params }: { child
 
   const memberships = await listAccessibleWorkspacesForUser(userId);
   const transcriptsCount = await countTranscriptsForWorkspace({ workspaceId: workspaceContext.workspace.id });
+  // Rehydration is best-effort: a transient DB hiccup must not block
+  // the entire shell from rendering. The tray simply starts empty in
+  // that case and the user can still interact with the rest of the
+  // workspace; new submissions also continue to work because they
+  // populate the tray locally.
+  const rehydratedUploadItems = await safeListUploadManagerRehydrationItems({ workspaceSlug: slug, userId });
   const cookieStore = await cookies();
   const sidebarCookie = cookieStore.get("sidebar_state")?.value;
   const defaultSidebarOpen = sidebarCookie === "false" ? false : true;
@@ -65,13 +72,28 @@ export default async function WorkspaceShellLayout({ children, params }: { child
       email: auth.context.user.email,
       image: auth.context.user.image ?? null,
     },
+    currentRole: workspaceContext.role,
   };
 
   return (
-    <WorkspaceShell context={shellContext} transcriptsCount={transcriptsCount} defaultSidebarOpen={defaultSidebarOpen}>
+    <WorkspaceShell
+      context={shellContext}
+      transcriptsCount={transcriptsCount}
+      defaultSidebarOpen={defaultSidebarOpen}
+      rehydratedUploadItems={rehydratedUploadItems}
+    >
       {children}
     </WorkspaceShell>
   );
+}
+
+async function safeListUploadManagerRehydrationItems(args: { workspaceSlug: string; userId: string }): Promise<UploadManagerRehydrationItem[]> {
+  try {
+    return await listUploadManagerRehydrationItems(args);
+  } catch (error) {
+    console.error("[workspace-shell] upload-manager rehydration failed", error);
+    return [];
+  }
 }
 
 // The switcher should always reveal the *current* workspace — even

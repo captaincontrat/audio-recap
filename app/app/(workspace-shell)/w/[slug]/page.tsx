@@ -1,4 +1,4 @@
-import { RiAlertFill, RiArrowRightLine, RiInboxLine, RiUploadCloud2Line } from "@remixicon/react";
+import { RiAlertFill, RiArrowRightLine, RiInboxLine } from "@remixicon/react";
 import { headers } from "next/headers";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
+import { OverviewStartUploadCta } from "@/components/workspace-shell/upload-manager/start-upload-cta";
 import { evaluateProtectedRoute } from "@/lib/auth/guards";
 import { canRoleCreateTranscripts } from "@/lib/server/meetings";
 import type { TranscriptLibraryItem } from "@/lib/server/transcripts";
@@ -66,21 +67,13 @@ export default async function WorkspaceOverviewPage({ params }: { params: Promis
   const canCreateTranscripts = canRoleCreateTranscripts(overview.role);
   const isEmpty = overview.activeWork.length === 0 && overview.libraryHighlights.length === 0;
   const transcriptsHref = `/w/${encodeURIComponent(slug)}/transcripts`;
-  const newMeetingHref = `/w/${encodeURIComponent(slug)}/meetings/new`;
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 p-6">
       <header className="flex flex-col gap-2">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h1 className="text-2xl font-semibold">Workspace overview</h1>
-          {canCreateTranscripts ? (
-            <Button asChild data-testid="overview-start-upload-cta">
-              <Link href={newMeetingHref}>
-                <RiUploadCloud2Line data-icon="inline-start" />
-                Start upload
-              </Link>
-            </Button>
-          ) : null}
+          {canCreateTranscripts ? <OverviewStartUploadCta /> : null}
         </div>
         <p className="text-sm text-muted-foreground">
           In-flight processing, failed items that need attention, and recently updated transcripts in this workspace.
@@ -88,7 +81,7 @@ export default async function WorkspaceOverviewPage({ params }: { params: Promis
       </header>
 
       {isEmpty ? (
-        <EmptyOverview slug={slug} canCreateTranscripts={canCreateTranscripts} />
+        <EmptyOverview canCreateTranscripts={canCreateTranscripts} />
       ) : (
         <div className="flex flex-col gap-6">
           <ActiveWorkSection items={overview.activeWork} workspaceSlug={slug} />
@@ -245,8 +238,7 @@ function labelForActiveStatus(status: TranscriptLibraryItem["status"]): string {
   }
 }
 
-function EmptyOverview({ slug, canCreateTranscripts }: { slug: string; canCreateTranscripts: boolean }) {
-  const newMeetingHref = `/w/${encodeURIComponent(slug)}/meetings/new`;
+function EmptyOverview({ canCreateTranscripts }: { canCreateTranscripts: boolean }) {
   return (
     <Empty data-testid="overview-empty-state">
       <EmptyHeader>
@@ -262,12 +254,7 @@ function EmptyOverview({ slug, canCreateTranscripts }: { slug: string; canCreate
       </EmptyHeader>
       {canCreateTranscripts ? (
         <EmptyContent>
-          <Button asChild data-testid="overview-empty-start-upload-cta">
-            <Link href={newMeetingHref}>
-              <RiUploadCloud2Line data-icon="inline-start" />
-              Start upload
-            </Link>
-          </Button>
+          <OverviewStartUploadCta testId="overview-empty-start-upload-cta" />
         </EmptyContent>
       ) : null}
     </Empty>

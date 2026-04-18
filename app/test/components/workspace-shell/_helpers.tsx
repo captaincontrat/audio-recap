@@ -45,6 +45,7 @@ export function makeShellContext(overrides: Partial<WorkspaceShellContextValue> 
     workspace: overrides.workspace ?? DEFAULT_WORKSPACE,
     memberships: overrides.memberships ?? [DEFAULT_WORKSPACE, TEAM_WORKSPACE],
     user: overrides.user ?? DEFAULT_USER,
+    currentRole: overrides.currentRole ?? "admin",
   };
 }
 

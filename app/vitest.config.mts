@@ -97,6 +97,14 @@ export default defineConfig({
         "lib/server/meetings/status-read.ts",
         "lib/server/meetings/transcripts.ts",
         "lib/server/meetings/index.ts",
+        // `upload-manager-rehydration.ts` is a thin DB-orchestration
+        // helper around the same shape as `status-read.ts`: it
+        // resolves the workspace context, runs a single SELECT, and
+        // delegates per-row formatting to the pure
+        // `toUploadManagerRehydrationItem` projection (unit-tested
+        // directly). Excluded for the same reason — its DB/access
+        // wiring is exercised by Playwright.
+        "lib/server/meetings/upload-manager-rehydration.ts",
         // `private-transcript-library` DB-touching modules. The pure
         // decision logic (cursor codec, sort option parsing, query
         // option validation, projections, HTTP status mapping,
