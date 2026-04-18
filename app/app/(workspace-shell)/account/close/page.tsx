@@ -14,12 +14,13 @@ import { evaluateAdminHandoffForClosure } from "@/lib/server/accounts";
 import { getDb } from "@/lib/server/db/client";
 import { session as sessionTable, twoFactor as twoFactorTable, user as userTable } from "@/lib/server/db/schema";
 
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 export async function generateMetadata() {
   const { translate } = await getServerTranslator();
   return { title: translate("chrome.accountClose.title") };
 }
-
-export const dynamic = "force-dynamic";
 
 // Account closure confirmation page. Middleware already blocks
 // unauthenticated visitors; this page additionally enforces the
@@ -36,6 +37,11 @@ export const dynamic = "force-dynamic";
 //      that includes 2FA.
 //   4. Last-eligible-active-admin handoff — surfaces the blocking
 //      workspaces so the user can resolve them before retrying.
+//
+// The shared shell wraps this page through `(workspace-shell)/account/layout.tsx`
+// (`add-account-pages-inside-shell`), so the page itself only renders
+// the content container — the sidebar, header, breadcrumb band, and
+// upload chrome live in the shell.
 export default async function CloseAccountPage() {
   const auth = getAuth();
   const session = await auth.api.getSession({ headers: await headers() });
@@ -83,7 +89,7 @@ export default async function CloseAccountPage() {
   const { translate } = await getServerTranslator();
 
   return (
-    <main className="mx-auto flex min-h-svh max-w-xl flex-col gap-6 p-6">
+    <div className="mx-auto flex w-full max-w-xl flex-col gap-6 p-6" data-testid="account-close-content">
       <header className="flex flex-col gap-2">
         <h1 className="text-2xl font-semibold">{translate("chrome.accountClose.heading")}</h1>
         <p className="text-sm text-muted-foreground">{translate("chrome.accountClose.subtitle")}</p>
@@ -137,6 +143,6 @@ export default async function CloseAccountPage() {
           <Link href="/account/security">{translate("chrome.accountClose.cancel")}</Link>
         </Button>
       </div>
-    </main>
+    </div>
   );
 }

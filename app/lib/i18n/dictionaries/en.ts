@@ -212,6 +212,10 @@ export const en = {
   "chrome.dashboard.account.verified.yes": "Yes",
   "chrome.dashboard.account.verified.no": "No",
 
+  "chrome.shell.breadcrumb.accountRoot": "Account",
+  "chrome.shell.breadcrumb.accountSecurity": "Security",
+  "chrome.shell.breadcrumb.accountClose": "Close account",
+
   "chrome.accountSecurity.title": "Account security",
   "chrome.accountSecurity.heading": "Account security",
   "chrome.accountSecurity.subtitle":

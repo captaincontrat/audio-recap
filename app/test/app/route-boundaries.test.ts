@@ -7,9 +7,18 @@ import { describe, expect, test } from "vitest";
 // `add-workspace-app-shell` design pins (task 1.4 / 7.4) cannot drift
 // silently. Workspace-scoped pages MUST live inside the
 // `(workspace-shell)` private route group so the shared chrome wraps
-// them; non-workspace surfaces (auth, account, public share, the
-// landing redirect target) MUST stay outside that group so they
+// them; non-workspace surfaces (auth, public share, the landing
+// redirect target, and account-recovery routes that intentionally
+// render outside the shell) MUST stay outside that group so they
 // continue to render without the workspace sidebar/header/breadcrumb.
+//
+// Account routes are split (`add-account-pages-inside-shell`):
+//   - `/account/security` and `/account/close` live inside the shell
+//     so the user keeps the same chrome they had moments ago.
+//   - `/account/recent-auth` and `/account/closed` stay outside the
+//     shell because they are step-up / closed-account surfaces that
+//     should not surface workspace context (a closed account has no
+//     workspace; recent-auth is a focused re-elevation prompt).
 
 const APP_ROOT = resolve(__dirname, "../../app");
 
@@ -63,6 +72,21 @@ describe("Workspace-scoped routes live inside (workspace-shell) (task 1.4 / 7.4)
   });
 });
 
+describe("Account-settings pages live inside (workspace-shell) (add-account-pages-inside-shell tasks 3.1 / 4.1)", () => {
+  test("the account-shell layout is mounted at the in-shell account root", () => {
+    assertIsFile(shellPath("account", "layout.tsx"));
+  });
+
+  test.each([["account/security/page.tsx"], ["account/close/page.tsx"]])("account page %s lives under (workspace-shell)", (relative) => {
+    assertIsFile(shellPath(...relative.split("/")));
+  });
+
+  test("the legacy /app/account/{security,close} copies outside the route group have been removed", () => {
+    assertDoesNotExist(nonShellPath("account", "security", "page.tsx"));
+    assertDoesNotExist(nonShellPath("account", "close", "page.tsx"));
+  });
+});
+
 describe("Non-workspace surfaces stay outside (workspace-shell) (task 1.4 / 7.4)", () => {
   test.each([
     "share",
@@ -72,7 +96,6 @@ describe("Non-workspace surfaces stay outside (workspace-shell) (task 1.4 / 7.4)
     "reset-password",
     "verify-email",
     "two-factor",
-    "account",
     "dashboard",
   ])("'/app/%s' stays outside the workspace-shell route group", (segment) => {
     assertIsDirectory(nonShellPath(segment));
@@ -82,5 +105,12 @@ describe("Non-workspace surfaces stay outside (workspace-shell) (task 1.4 / 7.4)
   test("the landing /app/page.tsx is a sibling of (workspace-shell), not a child", () => {
     assertIsFile(nonShellPath("page.tsx"));
     assertDoesNotExist(shellPath("page.tsx"));
+  });
+});
+
+describe("Account recovery and closed-account routes stay outside (workspace-shell) (add-account-pages-inside-shell tasks 3.2 / 4.3)", () => {
+  test.each([["account/recent-auth/page.tsx"], ["account/closed/page.tsx"]])("account page %s stays outside (workspace-shell)", (relative) => {
+    assertIsFile(nonShellPath(...relative.split("/")));
+    assertDoesNotExist(shellPath(...relative.split("/")));
   });
 });

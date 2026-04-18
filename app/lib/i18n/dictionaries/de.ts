@@ -215,6 +215,10 @@ export const de: Record<TranslationKey, string> = {
   "chrome.dashboard.account.verified.yes": "Ja",
   "chrome.dashboard.account.verified.no": "Nein",
 
+  "chrome.shell.breadcrumb.accountRoot": "Konto",
+  "chrome.shell.breadcrumb.accountSecurity": "Sicherheit",
+  "chrome.shell.breadcrumb.accountClose": "Konto schließen",
+
   "chrome.accountSecurity.title": "Kontosicherheit",
   "chrome.accountSecurity.heading": "Kontosicherheit",
   "chrome.accountSecurity.subtitle":

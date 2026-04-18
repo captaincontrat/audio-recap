@@ -12,6 +12,9 @@ import { REACTIVATION_WINDOW_DAYS } from "@/lib/server/accounts";
 import { getDb } from "@/lib/server/db/client";
 import { user as userTable } from "@/lib/server/db/schema";
 
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
 export async function generateMetadata() {
   const { translate } = await getServerTranslator();
   return { title: translate("chrome.accountSecurity.title") };
@@ -22,6 +25,13 @@ export async function generateMetadata() {
 // Middleware already blocks unauthenticated users from reaching this
 // page (`/account` is in the protected prefix list), so on arrival the
 // only way to be bounced is a stale elevation window.
+//
+// The shared shell wraps this page through `(workspace-shell)/account/layout.tsx`
+// (`add-account-pages-inside-shell`), so the page itself only renders
+// the content container — the sidebar, header, breadcrumb band, and
+// upload chrome live in the shell. The previous bare
+// `<main className="min-h-svh ...">` wrapper has been removed because
+// `SidebarInset` now owns the top-level frame.
 export default async function AccountSecurityPage() {
   const auth = getAuth();
   const session = await auth.api.getSession({ headers: await headers() });
@@ -43,7 +53,7 @@ export default async function AccountSecurityPage() {
   const { translate } = await getServerTranslator();
 
   return (
-    <main className="mx-auto flex min-h-svh max-w-xl flex-col gap-6 p-6">
+    <div className="mx-auto flex w-full max-w-xl flex-col gap-6 p-6" data-testid="account-security-content">
       <header className="flex flex-col gap-2">
         <h1 className="text-2xl font-semibold">{translate("chrome.accountSecurity.heading")}</h1>
         <p className="text-sm text-muted-foreground">{translate("chrome.accountSecurity.subtitle")}</p>
@@ -62,6 +72,6 @@ export default async function AccountSecurityPage() {
           </Button>
         </div>
       </section>
-    </main>
+    </div>
   );
 }

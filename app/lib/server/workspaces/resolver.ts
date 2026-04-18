@@ -80,6 +80,25 @@ export async function resolveDefaultLandingForUser(args: {
   });
 }
 
+// Resolve a current workspace context for non-workspace shell routes
+// (account-scoped pages hosted inside the shared shell). Reuses the
+// same default-workspace selection as `/dashboard` — last successfully
+// used accessible active workspace, otherwise the user's personal
+// workspace — and then loads the full `ResolvedWorkspaceContext` for
+// that workspace so the shared shell can populate its providers exactly
+// as it does on workspace-scoped routes.
+//
+// This helper deliberately does NOT accept an explicit destination:
+// account routes have their own URL contract and are not deep-link
+// destinations the resolver needs to respect.
+export async function resolveDefaultWorkspaceContextForUser(args: { userId: string; now?: Date }): Promise<ResolvedWorkspaceContext> {
+  const decision = await resolveDefaultLandingForUser({ userId: args.userId, now: args.now });
+  if (decision.kind === "explicit") {
+    throw new Error("Default workspace context resolver must not produce an explicit destination");
+  }
+  return resolveWorkspaceContextFromSlug({ slug: decision.slug, userId: args.userId });
+}
+
 function findLastValidWorkspace(memberships: Array<{ membership: WorkspaceMembershipRow; workspace: WorkspaceRow }>): RememberedWorkspace | null {
   for (const entry of memberships) {
     if (entry.membership.lastAccessedAt === null) {

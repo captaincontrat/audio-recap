@@ -17,6 +17,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import Link from "next/link";
 
 import { useBreadcrumbContext } from "./breadcrumb-context";
+import { type BreadcrumbRootConfig, useBreadcrumbRoot } from "./breadcrumb-root-context";
 import { useWorkspaceShell } from "./workspace-context";
 
 // Sticky breadcrumb band rendered inside `SidebarInset` directly above
@@ -26,7 +27,10 @@ import { useWorkspaceShell } from "./workspace-context";
 // viewport on mobile (the inset already collapses there).
 //
 // Composition rules baked in:
-// - root crumb is the current workspace name and never shrinks (4.2)
+// - root crumb is the current workspace name on workspace routes and
+//   a non-workspace content root (for example `Account`) on
+//   account-shell routes; the root never shrinks in either variant
+//   (`add-account-pages-inside-shell` task 2.2)
 // - the final crumb truncates first with a full-label tooltip (4.3)
 // - middle crumbs collapse into a `BreadcrumbEllipsis` dropdown when
 //   the chain still overflows (4.3)
@@ -36,10 +40,12 @@ import { useWorkspaceShell } from "./workspace-context";
 //   the upload manager landing in the next change.
 export function BreadcrumbBand() {
   const { workspace } = useWorkspaceShell();
+  const rootConfig = useBreadcrumbRoot();
   const pathname = usePathname();
   const breadcrumb = useBreadcrumbContext();
 
-  const segments = useMemo(() => buildBreadcrumbSegments(pathname, workspace.slug), [pathname, workspace.slug]);
+  const root = useMemo(() => buildBreadcrumbRoot(rootConfig, workspace), [rootConfig, workspace]);
+  const segments = useMemo(() => buildBreadcrumbSegments(pathname, rootConfig, workspace.slug), [pathname, rootConfig, workspace.slug]);
   const finalSegment = segments[segments.length - 1];
   const trailingLabel = breadcrumb?.finalCrumbLabel ?? null;
   const overrideFinalLabel = trailingLabel && finalSegment ? trailingLabel : null;
@@ -53,16 +59,18 @@ export function BreadcrumbBand() {
         <BreadcrumbList className="flex-nowrap text-xs">
           <BreadcrumbItem className="shrink-0">
             {segments.length === 0 ? (
-              <BreadcrumbPage data-testid="workspace-shell-breadcrumb-root">{workspace.name || workspace.slug}</BreadcrumbPage>
+              <BreadcrumbPage data-testid="workspace-shell-breadcrumb-root" data-root-kind={rootConfig.kind}>
+                {root.label}
+              </BreadcrumbPage>
             ) : (
               <BreadcrumbLink asChild>
-                <Link href={`/w/${encodeURIComponent(workspace.slug)}`} data-testid="workspace-shell-breadcrumb-root">
-                  {workspace.name || workspace.slug}
+                <Link href={root.href} data-testid="workspace-shell-breadcrumb-root" data-root-kind={rootConfig.kind}>
+                  {root.label}
                 </Link>
               </BreadcrumbLink>
             )}
           </BreadcrumbItem>
-          <MiddleCrumbs segments={segments} workspaceSlug={workspace.slug} />
+          <MiddleCrumbs segments={segments} />
           {finalSegment ? <FinalCrumb label={overrideFinalLabel ?? finalSegment.label} /> : null}
         </BreadcrumbList>
       </Breadcrumb>
@@ -73,9 +81,9 @@ export function BreadcrumbBand() {
 // Stitch the middle-of-chain crumbs together. When the chain has more
 // than one middle crumb the helper renders the first verbatim and
 // collapses the remaining middles into a `BreadcrumbEllipsis`
-// dropdown so the workspace root and final crumb always have room.
-// One middle crumb renders inline.
-function MiddleCrumbs({ segments, workspaceSlug }: { segments: BreadcrumbSegment[]; workspaceSlug: string }) {
+// dropdown so the root and final crumb always have room. One middle
+// crumb renders inline.
+function MiddleCrumbs({ segments }: { segments: BreadcrumbSegment[] }) {
   if (segments.length <= 1) return null;
   const middles = segments.slice(0, -1);
   if (middles.length === 1) {
@@ -85,7 +93,7 @@ function MiddleCrumbs({ segments, workspaceSlug }: { segments: BreadcrumbSegment
         <BreadcrumbSeparator />
         <BreadcrumbItem className="min-w-0 shrink">
           <BreadcrumbLink asChild className="truncate">
-            <Link href={hrefFor(workspaceSlug, only)} data-testid="workspace-shell-breadcrumb-middle">
+            <Link href={only.href} data-testid="workspace-shell-breadcrumb-middle">
               {only.label}
             </Link>
           </BreadcrumbLink>
@@ -100,7 +108,7 @@ function MiddleCrumbs({ segments, workspaceSlug }: { segments: BreadcrumbSegment
       <BreadcrumbSeparator />
       <BreadcrumbItem className="min-w-0 shrink">
         <BreadcrumbLink asChild className="truncate">
-          <Link href={hrefFor(workspaceSlug, first)} data-testid="workspace-shell-breadcrumb-middle">
+          <Link href={first.href} data-testid="workspace-shell-breadcrumb-middle">
             {first.label}
           </Link>
         </BreadcrumbLink>
@@ -118,7 +126,7 @@ function MiddleCrumbs({ segments, workspaceSlug }: { segments: BreadcrumbSegment
           <DropdownMenuContent align="start" sideOffset={4} className="min-w-44">
             {collapsed.map((segment) => (
               <DropdownMenuItem key={segment.href} asChild>
-                <Link href={hrefFor(workspaceSlug, segment)}>{segment.label}</Link>
+                <Link href={segment.href}>{segment.label}</Link>
               </DropdownMenuItem>
             ))}
           </DropdownMenuContent>
@@ -156,14 +164,57 @@ type BreadcrumbSegment = {
   label: string;
 };
 
+type BreadcrumbRoot = {
+  href: string;
+  label: string;
+};
+
+// Resolve the root crumb's label and href from the current root
+// config. For workspace routes the label falls back to the slug if
+// the workspace name is empty (matches the previous behavior); for
+// account routes the localized label always wins.
+function buildBreadcrumbRoot(rootConfig: BreadcrumbRootConfig, workspace: { slug: string; name: string }): BreadcrumbRoot {
+  switch (rootConfig.kind) {
+    case "workspace":
+      return {
+        href: `/w/${encodeURIComponent(workspace.slug)}`,
+        label: workspace.name || workspace.slug,
+      };
+    case "account":
+      // The non-workspace root has no canonical landing URL — there
+      // is no `Account` index page in the design — so we point it at
+      // the security page, which is the user-menu's "Account
+      // security" entry point and the most common destination from
+      // the breadcrumb root.
+      return { href: "/account/security", label: rootConfig.rootLabel };
+    default: {
+      const exhaustive: never = rootConfig;
+      throw new Error(`Unhandled breadcrumb root kind: ${String(exhaustive)}`);
+    }
+  }
+}
+
 // Derive default crumbs from the current pathname after stripping the
-// workspace root. Pages may override the final crumb's label through
+// root prefix. Pages may override the final crumb's label through
 // `usePushFinalCrumb` for routes whose segment is opaque (transcript
 // id, meeting id). The label fallback is a humanised version of the
 // raw URL segment so the band always has *something* meaningful to
 // show before the page-side override settles.
-function buildBreadcrumbSegments(pathname: string | null, workspaceSlug: string): BreadcrumbSegment[] {
+function buildBreadcrumbSegments(pathname: string | null, rootConfig: BreadcrumbRootConfig, workspaceSlug: string): BreadcrumbSegment[] {
   if (!pathname) return [];
+  switch (rootConfig.kind) {
+    case "workspace":
+      return buildWorkspaceSegments(pathname, workspaceSlug);
+    case "account":
+      return buildAccountSegments(pathname, rootConfig.sectionLabels);
+    default: {
+      const exhaustive: never = rootConfig;
+      throw new Error(`Unhandled breadcrumb root kind: ${String(exhaustive)}`);
+    }
+  }
+}
+
+function buildWorkspaceSegments(pathname: string, workspaceSlug: string): BreadcrumbSegment[] {
   const root = `/w/${encodeURIComponent(workspaceSlug)}`;
   if (!pathname.startsWith(root)) return [];
   const remainder = pathname.slice(root.length).replace(/^\/+/, "");
@@ -173,19 +224,30 @@ function buildBreadcrumbSegments(pathname: string | null, workspaceSlug: string)
   const segments: BreadcrumbSegment[] = [];
   for (const raw of parts) {
     cumulativeHref = `${cumulativeHref}/${raw}`;
-    segments.push({ href: cumulativeHref, label: humaniseSegment(raw) });
+    segments.push({ href: cumulativeHref, label: humaniseWorkspaceSegment(raw) });
   }
   return segments;
 }
 
-function hrefFor(_workspaceSlug: string, segment: BreadcrumbSegment): string {
-  return segment.href;
+function buildAccountSegments(pathname: string, sectionLabels: { security: string; close: string }): BreadcrumbSegment[] {
+  const root = "/account";
+  if (!pathname.startsWith(root)) return [];
+  const remainder = pathname.slice(root.length).replace(/^\/+/, "");
+  if (remainder.length === 0) return [];
+  const parts = remainder.split("/").filter((part) => part.length > 0);
+  let cumulativeHref = root;
+  const segments: BreadcrumbSegment[] = [];
+  for (const raw of parts) {
+    cumulativeHref = `${cumulativeHref}/${raw}`;
+    segments.push({ href: cumulativeHref, label: humaniseAccountSegment(raw, sectionLabels) });
+  }
+  return segments;
 }
 
 // Map a raw URL segment to a presentable label. Known sub-roots get
 // canonical names; opaque ids fall back to a shortened form so the
 // breadcrumb is never empty before a page-side override lands.
-function humaniseSegment(segment: string): string {
+function humaniseWorkspaceSegment(segment: string): string {
   switch (segment) {
     case "transcripts":
       return "Transcripts";
@@ -193,6 +255,17 @@ function humaniseSegment(segment: string): string {
       return "Meetings";
     case "new":
       return "New";
+    default:
+      return shortenIdLike(segment);
+  }
+}
+
+function humaniseAccountSegment(segment: string, sectionLabels: { security: string; close: string }): string {
+  switch (segment) {
+    case "security":
+      return sectionLabels.security;
+    case "close":
+      return sectionLabels.close;
     default:
       return shortenIdLike(segment);
   }

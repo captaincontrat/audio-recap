@@ -9,6 +9,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppSidebar } from "./app-sidebar";
 import { BreadcrumbBand } from "./breadcrumb-band";
 import { BreadcrumbProvider } from "./breadcrumb-context";
+import { type BreadcrumbRootConfig, BreadcrumbRootProvider } from "./breadcrumb-root-context";
 import { CommandPaletteProvider } from "./command-palette";
 import { EditSessionPresenceProvider } from "./edit-session-presence-context";
 import { SiteHeader } from "./site-header";
@@ -30,6 +31,12 @@ type Props = {
   // store so the tray reflects ongoing server-side work even on a
   // cold reload or cross-workspace return visit.
   rehydratedUploadItems: RehydratedTranscriptStatus[];
+  // Optional breadcrumb root override for non-workspace shell routes
+  // (e.g. account-settings pages render `Account` as the root crumb
+  // instead of the resolved workspace name). Defaults to the
+  // workspace variant so existing workspace layouts do not have to
+  // pass anything.
+  breadcrumbRoot?: BreadcrumbRootConfig;
   children: ReactNode;
 };
 
@@ -54,8 +61,9 @@ type Props = {
 //   workspace-scoped route. This is the level the design pins for the
 //   tray to survive intra-shell navigation and stay scoped to the
 //   current workspace.
-export function WorkspaceShell({ context, transcriptsCount, defaultSidebarOpen, rehydratedUploadItems, children }: Props) {
+export function WorkspaceShell({ context, transcriptsCount, defaultSidebarOpen, rehydratedUploadItems, breadcrumbRoot, children }: Props) {
   const canSubmit = canSubmitToWorkspaceFromShellContext(context);
+  const breadcrumbRootConfig: BreadcrumbRootConfig = breadcrumbRoot ?? { kind: "workspace" };
   return (
     <WorkspaceShellContextProvider value={context}>
       <UploadManagerProvider workspaceSlug={context.workspace.slug} canSubmit={canSubmit}>
@@ -64,19 +72,21 @@ export function WorkspaceShell({ context, transcriptsCount, defaultSidebarOpen, 
             <EditSessionPresenceProvider>
               <CommandPaletteProvider>
                 <BreadcrumbProvider>
-                  <SidebarProvider defaultOpen={defaultSidebarOpen}>
-                    <AppSidebar />
-                    <SidebarInset className="flex min-h-svh flex-col">
-                      <SiteHeader />
-                      <BreadcrumbBand />
-                      <div className="flex flex-1 flex-col" data-testid="workspace-shell-content">
-                        {children}
-                      </div>
-                    </SidebarInset>
-                    <UploadDropOverlay />
-                    <UploadManagerTray />
-                    <UploadManagerRehydrator rehydrated={rehydratedUploadItems} />
-                  </SidebarProvider>
+                  <BreadcrumbRootProvider value={breadcrumbRootConfig}>
+                    <SidebarProvider defaultOpen={defaultSidebarOpen}>
+                      <AppSidebar />
+                      <SidebarInset className="flex min-h-svh flex-col">
+                        <SiteHeader />
+                        <BreadcrumbBand />
+                        <div className="flex flex-1 flex-col" data-testid="workspace-shell-content">
+                          {children}
+                        </div>
+                      </SidebarInset>
+                      <UploadDropOverlay />
+                      <UploadManagerTray />
+                      <UploadManagerRehydrator rehydrated={rehydratedUploadItems} />
+                    </SidebarProvider>
+                  </BreadcrumbRootProvider>
                 </BreadcrumbProvider>
               </CommandPaletteProvider>
             </EditSessionPresenceProvider>

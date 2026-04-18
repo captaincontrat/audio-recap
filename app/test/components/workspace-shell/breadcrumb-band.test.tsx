@@ -55,7 +55,7 @@ describe("BreadcrumbBand workspace root (task 4.2 / 7.2)", () => {
   });
 
   test("renders nothing past the workspace root when the pathname is not workspace-scoped", () => {
-    mockUsePathname.mockReturnValue("/account/security");
+    mockUsePathname.mockReturnValue("/some/unrelated/path");
 
     renderInShell(<BreadcrumbBand />);
 
@@ -146,5 +146,66 @@ describe("BreadcrumbBand middle-crumb collapse (task 4.3 / 7.2)", () => {
     const root = screen.getByTestId("workspace-shell-breadcrumb-root");
     const rootItem = root.closest("[data-slot='breadcrumb-item']");
     expect(rootItem?.className).toContain("shrink-0");
+  });
+});
+
+// Account-root variant exercised by `add-account-pages-inside-shell`
+// (tasks 2.1, 2.2, 4.2). The shell layout swaps the breadcrumb root
+// to the localized non-workspace label on `/account/...` routes; the
+// resolved default workspace stays in `WorkspaceShellContext` for the
+// rest of the chrome but the breadcrumb chain MUST NOT mention it.
+const ACCOUNT_BREADCRUMB_ROOT = {
+  kind: "account" as const,
+  rootLabel: "Account",
+  sectionLabels: { security: "Security", close: "Close account" },
+};
+
+describe("BreadcrumbBand account root (add-account-pages-inside-shell tasks 2.1 / 4.2)", () => {
+  test("renders the localized account label as the page crumb on /account/security", () => {
+    mockUsePathname.mockReturnValue("/account/security");
+
+    renderInShell(<BreadcrumbBand />, { breadcrumbRoot: ACCOUNT_BREADCRUMB_ROOT });
+
+    const root = screen.getByTestId("workspace-shell-breadcrumb-root");
+    expect(root.textContent).toBe("Account");
+    expect(root.getAttribute("data-root-kind")).toBe("account");
+    expect(root.tagName).toBe("A");
+    expect(root.getAttribute("href")).toBe("/account/security");
+
+    const final = screen.getByTestId("workspace-shell-breadcrumb-page");
+    expect(final.textContent).toBe("Security");
+  });
+
+  test("renders the localized account label as the page crumb on /account/close", () => {
+    mockUsePathname.mockReturnValue("/account/close");
+
+    renderInShell(<BreadcrumbBand />, { breadcrumbRoot: ACCOUNT_BREADCRUMB_ROOT });
+
+    expect(screen.getByTestId("workspace-shell-breadcrumb-root").textContent).toBe("Account");
+    expect(screen.getByTestId("workspace-shell-breadcrumb-page").textContent).toBe("Close account");
+  });
+
+  test("never surfaces the resolved workspace name in the chain on account routes", () => {
+    mockUsePathname.mockReturnValue("/account/security");
+
+    renderInShell(<BreadcrumbBand />, { breadcrumbRoot: ACCOUNT_BREADCRUMB_ROOT });
+
+    const band = screen.getByTestId("workspace-shell-breadcrumb-band");
+    expect(band.textContent).not.toContain("Riley's Workspace");
+    expect(band.textContent).not.toContain("riley");
+  });
+
+  test("preserves truncation priority on account routes: root keeps shrink-0, final truncates first", () => {
+    mockUsePathname.mockReturnValue("/account/security");
+
+    renderInShell(<BreadcrumbBand />, { breadcrumbRoot: ACCOUNT_BREADCRUMB_ROOT });
+
+    const root = screen.getByTestId("workspace-shell-breadcrumb-root");
+    const rootItem = root.closest("[data-slot='breadcrumb-item']");
+    expect(rootItem?.className).toContain("shrink-0");
+
+    const final = screen.getByTestId("workspace-shell-breadcrumb-page");
+    expect(final.className).toContain("truncate");
+    expect(final.className).toContain("max-w-full");
   });
 });

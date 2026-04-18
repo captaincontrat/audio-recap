@@ -159,7 +159,12 @@ export {
 
 export { backfillPersonalWorkspaces, type EnsurePersonalWorkspaceOptions, ensurePersonalWorkspace } from "./personal";
 
-export { type ResolvedWorkspaceContext, resolveDefaultLandingForUser, resolveWorkspaceContextFromSlug } from "./resolver";
+export {
+  type ResolvedWorkspaceContext,
+  resolveDefaultLandingForUser,
+  resolveDefaultWorkspaceContextForUser,
+  resolveWorkspaceContextFromSlug,
+} from "./resolver";
 
 export { type WorkspaceScopedResource, workspaceOwnershipColumns } from "./resource-contract";
 

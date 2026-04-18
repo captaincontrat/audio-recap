@@ -4,6 +4,7 @@ import type { ReactElement, ReactNode } from "react";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { BreadcrumbProvider } from "@/components/workspace-shell/breadcrumb-context";
+import { type BreadcrumbRootConfig, BreadcrumbRootProvider } from "@/components/workspace-shell/breadcrumb-root-context";
 import { CommandPaletteProvider } from "@/components/workspace-shell/command-palette";
 import { EditSessionPresenceProvider } from "@/components/workspace-shell/edit-session-presence-context";
 import { TranscriptsCountProvider } from "@/components/workspace-shell/transcripts-count-context";
@@ -62,6 +63,11 @@ export type ShellRenderOptions = {
   // so the provider's keyboard listener does not throw when shortcuts
   // fire during simulated input events.
   withCommandPalette?: boolean;
+  // Override the breadcrumb root config. Defaults to the workspace
+  // variant so workspace-shell tests do not have to opt in; account
+  // shell tests pass `{ kind: "account", ... }` to exercise the
+  // non-workspace root variant.
+  breadcrumbRoot?: BreadcrumbRootConfig;
 } & Omit<RenderOptions, "wrapper">;
 
 // Wraps children in the same provider stack `<WorkspaceShell>` mounts,
@@ -69,12 +75,21 @@ export type ShellRenderOptions = {
 // components (sidebar, breadcrumb band, search trigger, …) under the
 // real context they would see in production.
 export function renderInShell(ui: ReactElement, options: ShellRenderOptions = {}): RenderResult {
-  const { context = makeShellContext(), transcriptsCount = 0, defaultSidebarOpen = true, withCommandPalette = true, ...rest } = options;
+  const {
+    context = makeShellContext(),
+    transcriptsCount = 0,
+    defaultSidebarOpen = true,
+    withCommandPalette = true,
+    breadcrumbRoot = { kind: "workspace" } satisfies BreadcrumbRootConfig,
+    ...rest
+  } = options;
 
   function Wrapper({ children }: { children: ReactNode }) {
     const tree = (
       <BreadcrumbProvider>
-        <SidebarProvider defaultOpen={defaultSidebarOpen}>{children}</SidebarProvider>
+        <BreadcrumbRootProvider value={breadcrumbRoot}>
+          <SidebarProvider defaultOpen={defaultSidebarOpen}>{children}</SidebarProvider>
+        </BreadcrumbRootProvider>
       </BreadcrumbProvider>
     );
     const withCount = transcriptsCount === null ? tree : <TranscriptsCountProvider value={transcriptsCount}>{tree}</TranscriptsCountProvider>;
