@@ -154,6 +154,60 @@ Existing archived-workspace and read-only behavior on the dedicated submission a
 - [Drop overlay could intercept drops intended for editor or library drop targets] -> Gate the shell drop target at the shell level; narrower drop targets inside the content area (if any exist in future) must explicitly stop propagation.
 - [Same user dragging the same file twice could create duplicate tray items] -> The tray is client-side only; a second drop is a second draft item. Server-side deduplication is not in scope here and is handled by existing submission validation.
 
+## Shadcn building blocks
+
+This change adds the shell's upload chrome on top of the chrome installed in `add-workspace-app-shell`. By the time this change starts, the project has: `button`, `input`, `label`, `textarea`, `card`, `badge`, `empty`, `alert`, `skeleton`, `separator` (from the overview change), plus `sidebar`, `breadcrumb`, `collapsible`, `dropdown-menu`, `avatar`, `command`, `tooltip`, `kbd`, `sonner` (from the shell change). Use `.agents/skills/shadcn/SKILL.md` and `app/components.json` (`style: radix-mira`, `iconLibrary: remixicon`, `tailwind v4`).
+
+| Use in the upload chrome | Component | Already installed? | CLI |
+| --- | --- | --- | --- |
+| Per-item draft / lifecycle row inside the bottom-right tray (file name, optional notes, current phase, dismiss). Use full `Card` composition: `CardHeader` for filename + lifecycle badge, `CardContent` for progress + notes, `CardFooter` for confirm/cancel/dismiss. | `card` | Yes (overview change) | — |
+| Per-item phase chip — one chip per `draft` / `preparing` / `uploading` / `finalizing` / `local error` / `queued` / `preprocessing` / `transcribing` / `generating_recap` / `generating_title` / `finalizing` / `retrying` / `completed` / `failed`. Use `variant="secondary"` for in-progress, `variant="destructive"` for `local error` / `failed`, `variant="default"` for `completed`. Never raw colored spans. | `badge` | Yes (overview change) | — |
+| Determinate progress for the local upload phases (`preparing` / `uploading` / `finalizing`) and for any server-side progress signal exposed by the meeting-status endpoint. | `progress` | No | `pnpm dlx shadcn@latest add progress` |
+| Tray collapse-to-summary (header summary + count when the queue grows beyond a small visible number). Render the tray header as `CollapsibleTrigger` over a `SidebarMenuButton`-like row; render the queue list as `CollapsibleContent`. | `collapsible` | Yes (shell change, transitively via `sidebar-16`) | — |
+| Scrollable queue inside the tray when many items are visible at once (constrain max-height; never an unconstrained scroll). | `scroll-area` | No | `pnpm dlx shadcn@latest add scroll-area` |
+| Optional notes input inside the draft state. Use `Textarea` directly inside a `Field` + `FieldLabel` (per the forms rules — no raw `<div>` + `<label>` here). | `textarea` (and `field` for layout) | `textarea` yes; `field` likely no — verify | `pnpm dlx shadcn@latest add field` (only if not already pulled by something else) |
+| Confirm / cancel / dismiss / "open in dedicated status page" buttons inside tray items. Use `variant="default"` for confirm, `variant="ghost"` for cancel and per-item dismiss, `variant="link"` (with `asChild` + `next/link`) for the route into the dedicated status / detail page. Never `isLoading` — compose with `Spinner` + `data-icon` + `disabled`. | `button` (+ `spinner`) | `button` yes; `spinner` likely no | `pnpm dlx shadcn@latest add spinner` |
+| Tooltip on the disabled / absent header upload control in archived workspaces and for read-only members ("This workspace is archived" / "You don't have transcript-creation access here"). Tooltip on tray item icons (e.g. dismiss, open status) so the icon-only affordances stay legible. | `tooltip` | Yes (shell change) | — |
+| Toast for completed submissions, dismissals that the user might want to undo, and shell-level submission errors that don't belong on a tray item (e.g. unsupported file type before a draft is even created). Use `toast()` from `sonner`; do NOT build custom toast divs. | `sonner` | Yes (shell change) | — |
+| Modifier confirmation when the user dismisses a `failed` item that has not been opened in the dedicated status page (optional safety net). Use only if the team decides a confirmation is warranted; otherwise rely on the design's "failed items pin until dismissed" rule. | `alert-dialog` | No | `pnpm dlx shadcn@latest add alert-dialog` (optional) |
+| Header upload control in the shell's thin header — uses the existing icon `Button variant="ghost"` pattern from the shell change, with a remix icon (`RiUploadCloud2Line`) and a `Tooltip`. Disable / hide it for archived workspaces and read-only members. | `button` (+ `tooltip`) | Yes | — |
+
+Bulk install in one step:
+
+```bash
+pnpm dlx shadcn@latest add progress scroll-area field spinner alert-dialog
+```
+
+(Run `pnpm dlx shadcn@latest info --json` first; skip any package that is already in the `components` array.)
+
+### Drag-and-drop overlay (no shadcn primitive)
+
+There is no `dropzone` primitive in the `@shadcn` registry — this change should NOT install a third-party dropzone library either. Build the global drop overlay as a small client component mounted at the shell layout level:
+
+- Listen for `dragenter` / `dragover` / `dragleave` / `drop` on `window` (gated by a "shell mounted with transcript-creation access in the current workspace" boolean from the workspace-keyed store).
+- Render a fixed-position overlay covering the shell viewport using semantic tokens only: `bg-background/80 backdrop-blur-sm`, an inset dashed border using `border-2 border-dashed border-primary`, centered guidance text, and a remix icon (e.g. `RiUploadCloud2Line`).
+- Identify the target workspace by name in the overlay (Decisions section: "current-workspace drop overlay that identifies the target workspace").
+- On drop, hand the file off to the workspace-keyed store as a new `draft` tray item — never start the upload from the overlay itself.
+- Reject cleanly: if the workspace is archived or the user is read-only, never accept the drop and never show the overlay (Decisions section "Archived and read-only workspaces never show an active shell upload surface").
+
+### Tray geometry (composed, not a separate primitive)
+
+The upload manager is a single shell-level component composed from the primitives above:
+
+- Container: a `<div>` fixed at `bottom-4 right-4` (responsive on mobile), constrained width (e.g. `w-96 max-w-[calc(100vw-2rem)]`), with `Card` chrome.
+- Header row (always visible): collapse `CollapsibleTrigger` with a remix chevron icon (`RiArrowDownSLine` / `RiArrowUpSLine`), a one-line summary (count + current dominant stage), and a "dismiss all completed" `Button variant="ghost" size="icon"` when the queue has dismissable items.
+- Queue: `CollapsibleContent` containing a `ScrollArea` that lists per-item `Card`s.
+- Per-item card: filename truncation (use `truncate` shorthand, never the long `overflow-hidden text-ellipsis whitespace-nowrap` trio), lifecycle `Badge`, `Progress` (when applicable), optional notes `Textarea` while in `draft`, action buttons in `CardFooter`.
+
+### Composition notes for the implementer
+
+- **Workspace identity in the overlay and the tray.** Always show the workspace name (read from the explicit `[slug]` provider on workspace routes; from the resolved default-workspace context on the account routes that join the shell in `add-account-pages-inside-shell`). This is what makes the drop feel scoped.
+- **Form layout for the draft state.** Use `FieldGroup` + `Field` + `FieldLabel` even for the optional notes — `.agents/skills/shadcn/SKILL.md` rules forbid raw `<div>` + `<label>` for form layout.
+- **No `isPending` / `isLoading` on `Button`.** Compose `Spinner` + `data-icon="inline-start"` + `disabled` on the confirm button while a draft transitions to `preparing`.
+- **Icons.** Remix icons only: `RiUploadCloud2Line` (upload + overlay), `RiCloseLine` (cancel / dismiss), `RiCheckLine` (confirm), `RiErrorWarningLine` (failed badge), `RiLoader4Line` or `Spinner` for in-progress. Use `data-icon` inside `Button`, no `size-4`.
+- **Dismissal is client-only.** Mirror the design: never call any server endpoint from the tray's dismiss action; only mutate the workspace-keyed store.
+- **Forbidden patterns.** No custom drop-zone library, no centered modal for the confirmation step (the tray draft IS the confirmation surface), no per-item polling cadence different from the dedicated status page (reuse the existing polling), no manual `z-index` on the tray that competes with `Dialog` / `Sheet` / `DropdownMenu` from the rest of the shell.
+
 ## Migration Plan
 
 1. Introduce a workspace-keyed client upload-manager store/provider owned by the private workspace product layer. Keys are `workspaceSlug`; values are lists of tray items that carry both the local submission phase and the server transcript-processing phase.

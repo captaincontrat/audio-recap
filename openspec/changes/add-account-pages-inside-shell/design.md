@@ -90,6 +90,27 @@ This keeps the upload story coherent regardless of whether the user is on a work
 - [If default-workspace resolution fails because every workspace the user can access is archived, the upload chrome could show an inactive state on account routes] -> The existing archived rules from `add-shell-upload-entry-points-and-manager` cover this cleanly: no accepting drop target, no active header upload control. The user can still use account settings normally.
 - [Future account routes might want a route-specific provider surface] -> This change generalizes the shell to account routes without committing to route-specific providers; later work can add them on top if needed.
 
+## Shadcn building blocks
+
+This change is the lightest of the four on shadcn. The existing shell, breadcrumb, and upload chrome were installed by `add-workspace-app-shell` and `add-shell-upload-entry-points-and-manager`. Account pages keep their existing internal components (`TwoFactorSettings`, `PasskeyManager`, the close-account form) — this change only changes their hosting layer.
+
+| Use on account shell routes | Component | Already installed? | CLI |
+| --- | --- | --- | --- |
+| Account breadcrumb root crumb (`Account`) — first crumb on `/account/security` and `/account/close`. Compose from the existing `Breadcrumb` family (`BreadcrumbList` + `BreadcrumbItem` + `BreadcrumbLink` + `BreadcrumbSeparator` + `BreadcrumbPage`). The `BreadcrumbEllipsis` middle-collapse rule from the shell change applies unchanged. | `breadcrumb` | Yes (shell change, transitively via `sidebar-16`) | — |
+| Sidebar workspace switcher continues to render on account routes, targeting the resolved default workspace. Reuse the same composed `DropdownMenu` + `SidebarMenuButton` switcher built in `add-workspace-app-shell`. | `sidebar`, `dropdown-menu` | Yes (shell change) | — |
+| Header upload control, drop overlay, and bottom-right upload manager continue to render on account routes, targeting the resolved default workspace. Reuse the components built in `add-shell-upload-entry-points-and-manager`. When the resolved default workspace is archived or read-only, the existing rules disable / hide them — no new component work. | `card`, `badge`, `progress`, `collapsible`, `scroll-area`, `tooltip`, `sonner`, `button` | Yes (upload change) | — |
+| Account-page section containers (existing `<section>` blocks for two-factor, passkeys, close-account). Once they sit inside `SidebarInset`, prefer migrating any remaining ad-hoc `<section className="rounded-lg border">` wrappers to `Card` for visual consistency with the rest of the shell-hosted product. This is OPTIONAL and can land as a follow-up; keeping the existing markup is acceptable for this change. | `card` (optional refresh) | Yes (overview change) | — |
+
+No new `pnpm dlx shadcn@latest add` invocation is required for this change. Run `pnpm dlx shadcn@latest info --json` once before starting to confirm the dependency set is the union of the previous three changes.
+
+### Composition notes for the implementer
+
+- **Account root crumb label.** Localize the root crumb (e.g. `chrome.shell.breadcrumb.accountRoot`) using the existing i18n surface. Do NOT hardcode `Account`. Match the truncation behavior in the shell change: the root crumb never shrinks; the final crumb (e.g. `Security`, `Close account`) shrinks first with a full-title `Tooltip`.
+- **No new sidebar destination.** Tasks 2.3 and the design's non-goals are explicit: the sidebar middle nav stays exactly two destinations (Overview, Transcripts) for the resolved workspace. Account pages are reachable through the user-menu in the sidebar footer (composed via `DropdownMenu` in `add-workspace-app-shell`), not via a third nav group.
+- **Remove the bare `<main className="mx-auto max-w-xl ...">` wrappers.** Account pages currently render their own centered `main`. Inside the shared shell, the page should render directly into `SidebarInset` and let the shell own the top-level frame. Use a content container like `<div className="mx-auto w-full max-w-2xl flex flex-col gap-6 p-6">` only if needed for content width.
+- **Upload chrome inheritance.** No conditional code in the upload manager / drop overlay should know about account routes specifically. The chrome consumes the workspace context provider and behaves identically on workspace routes and on account routes; only the provider's source (explicit slug vs default-workspace resolver) differs.
+- **Forbidden patterns.** Do NOT introduce a route-specific provider just for account pages (Decisions section: an empty structural layer creates false symmetry). Do NOT create an `Account` sidebar group. Do NOT render the breadcrumb without a root crumb on account routes.
+
 ## Migration Plan
 
 1. Add default-workspace context resolution for non-workspace shell routes, reusing the logic used by the `/dashboard` redirect entry point (last successfully used accessible active workspace, otherwise the user's personal workspace). Surface that context to the shell's providers alongside the existing workspace-route context.

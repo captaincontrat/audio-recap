@@ -101,6 +101,33 @@ This avoids introducing a new "visible but empty" state or a new access path, an
 - [A temporary CTA handoff to the dedicated submission page creates a brief UX inconsistency with the later shell-level upload] -> Call out the deferral explicitly in the overview spec so reviewers and follow-up work know the CTA is expected to evolve.
 - [`/dashboard` users may have bookmarks or in-app references to the old page content] -> Convert `/dashboard` into a redirect that preserves authentication semantics, so bookmarks continue to work and simply resolve into the user's default workspace overview.
 
+## Shadcn building blocks
+
+The overview page is built almost entirely by composing existing shadcn primitives — see `.agents/skills/shadcn/SKILL.md` for the rules and `app/components.json` for the project config (`style: radix-mira`, `iconLibrary: remixicon`, `tailwind v4`, base alias `@/components/ui`). Already installed at the start of this change: `button`, `input`, `label`, `textarea`. The implementer SHOULD NOT hand-roll anything the table below already covers.
+
+| Use in the overview | Component | Already installed? | CLI |
+| --- | --- | --- | --- |
+| Active-work group container, library-highlights group container, archived-workspace notice block | `card` (with `CardHeader` / `CardTitle` / `CardDescription` / `CardContent` / `CardFooter` — full composition, never just `CardContent`) | No | `pnpm dlx shadcn@latest add card` |
+| Per-row processing-stage chip (`queued`, `transcribing`, `failed`, …) and the "attention-worthy" mark on terminal-failed items inside the active-work group | `badge` (use variants `secondary` for in-progress stages and `destructive` for failed; never raw colored spans) | No | `pnpm dlx shadcn@latest add badge` |
+| Workspace overview empty state (current user has no visible transcripts in this workspace) | `empty` (`Empty` + `EmptyHeader` + `EmptyTitle` + `EmptyDescription` + `EmptyContent`; never a custom centered div) | No | `pnpm dlx shadcn@latest add empty` |
+| Archived-workspace inactive notice on the overview, replacing the ad-hoc `ArchivedWorkspaceNotice` div used today on `w/[slug]/transcripts/page.tsx` | `alert` (`Alert` + `AlertTitle` + `AlertDescription`) | No | `pnpm dlx shadcn@latest add alert` |
+| Server-streamed loading placeholders for the two activity groups while transcripts resolve (no manual `animate-pulse` divs) | `skeleton` | No | `pnpm dlx shadcn@latest add skeleton` |
+| Visual divider between the active-work group and the library-highlights group (use only if the cards do not already provide enough separation; never `<hr>` or a `border-t` div) | `separator` | No | `pnpm dlx shadcn@latest add separator` |
+| Start-upload CTA, "Browse all transcripts" link, "Submit a meeting" CTA. Visible only to users with transcript-creation access. | `button` (use `variant="default"` for the primary CTA and `variant="ghost"` or `variant="link"` for the secondary navigation link; use `asChild` + `next/link` for navigation, not a hand-rolled anchor) | Yes | — |
+
+Bulk install in one step:
+
+```bash
+pnpm dlx shadcn@latest add card badge empty alert skeleton separator
+```
+
+Composition notes for the implementer:
+
+- **Icons.** This project's `iconLibrary` is `remixicon`. Use `@remixicon/react` (e.g. `RiUploadCloud2Line` for the start-upload CTA, `RiAlertLine` for failed-item chips, `RiInboxLine` or `RiFolderOpenLine` for the empty state). Do NOT introduce `lucide-react` here. When placing an icon inside a `Button`, use `data-icon="inline-start"` and let the component handle sizing — do not add `size-4`.
+- **Failed-item attention mark.** `Badge variant="destructive"` plus a remix icon (e.g. `RiAlertFill`) inside the active-work card row, not a custom red span.
+- **Read-only members.** Conditionally render the start-upload `Button` only when the resolved access role allows transcript creation; do not render a disabled CTA.
+- **Layout container.** Keep the page's outer `main` close to the existing `mx-auto max-w-3xl` width used by `w/[slug]/transcripts/page.tsx` so typography and spacing stay consistent until the shared shell lands in `add-workspace-app-shell`.
+
 ## Migration Plan
 
 1. Add the workspace overview route at `w/[slug]/page.tsx` that renders the active-work and library-highlights groups plus the start-upload CTA (when the user has transcript-creation access) and an empty state.

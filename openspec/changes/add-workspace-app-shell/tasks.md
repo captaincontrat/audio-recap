@@ -1,6 +1,6 @@
 ## 1. Shell scaffolding and providers
 
-- [ ] 1.1 Install shadcn `sidebar` and `command` primitives using the shadcn skill in `.agents/skills/shadcn/SKILL.md`. Do not hand-roll the composition the skill already covers.
+- [ ] 1.1 Install shadcn primitives using the shadcn skill in `.agents/skills/shadcn/SKILL.md`: start from the `sidebar-16` block (`pnpm dlx shadcn@latest add @shadcn/sidebar-16`, which transitively installs `sidebar`, `breadcrumb`, `separator`, `collapsible`, `dropdown-menu`, `avatar`, `button`, `label`), then add `command`, `tooltip`, `kbd`, and `sonner`. Adapt the block per the deltas in `design.md` (move the breadcrumb out of the header into a separate band, replace the search input with an icon + `CommandDialog`, reduce the four nav groups to one with two destinations, swap `IconPlaceholder` for `@remixicon/react` icons, replace `<a href>` with `next/link` via `asChild`). Do not hand-roll composition the block or skill already covers.
 - [ ] 1.2 Introduce a private route-group structure under `app/app/` that hosts the shared authenticated shell above workspace-scoped routes, and add a shared workspace-shell layout that mounts `SidebarProvider` configured for `collapsible="icon"`.
 - [ ] 1.3 Keep the existing `app/app/layout.tsx` as the root layout with theme and locale providers. Do not move theme / locale providers into the shell; they continue to live above it.
 

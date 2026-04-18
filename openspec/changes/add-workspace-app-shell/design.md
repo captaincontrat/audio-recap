@@ -110,6 +110,59 @@ The sidebar's middle nav shows a total library count next to the transcripts des
 - [Sidebar count could drift from the actual transcript library total] -> Derive it from the existing workspace transcript library read so the shell count and the library count share one source.
 - [Breadcrumb band could creep into hosting processing state as the upload manager lands] -> Keep the band strictly a navigation/identification band in this change and defer all live processing surface to the upload manager in the next change.
 
+## Shadcn building blocks
+
+This change is the most shadcn-heavy of the four. Use `.agents/skills/shadcn/SKILL.md` as the source of truth and `app/components.json` for project config (`style: radix-mira`, `iconLibrary: remixicon`, `tailwind v4`, base `radix`). Already installed at the start of this change (after `add-workspace-overview-and-default-landing` lands): `button`, `input`, `label`, `textarea`, plus `card`, `badge`, `empty`, `alert`, `skeleton`, `separator` from the overview change. The implementer SHOULD start from the `sidebar-16` block rather than wiring `Sidebar` primitives by hand.
+
+### Starting block: `sidebar-16`
+
+The `sidebar-16` registry block is the explicit starting point named in the Decisions section. It scaffolds: a sticky `SiteHeader`, a `SidebarProvider` with `SidebarInset`, an `AppSidebar` composed from `SidebarHeader` / `SidebarContent` / `SidebarFooter`, plus ready-made `nav-main.tsx`, `nav-secondary.tsx`, `nav-user.tsx`, `search-form.tsx`, and `site-header.tsx` files under a block-scoped folder. Adding it transitively installs: `sidebar`, `breadcrumb`, `separator`, `collapsible`, `dropdown-menu`, `avatar`, `button`, `label`.
+
+```bash
+pnpm dlx shadcn@latest add @shadcn/sidebar-16
+```
+
+Adapt `sidebar-16` to the design instead of using it as-is — the deltas are deliberate:
+
+| `sidebar-16` default | Adapt to | Why |
+| --- | --- | --- |
+| Breadcrumb rendered inside the header (`site-header.tsx`) | Move the `Breadcrumb` into a separate sticky band inside `SidebarInset` directly above page content | The Decisions section requires the breadcrumb band to sit below the header, content-width on desktop and full-viewport on mobile, so the workspace name stays visible on long meeting titles |
+| Real `SidebarInput` search form (`search-form.tsx`) plus a placeholder header search input | Replace with a non-input icon `Button` in the header right side that carries a visible kbd hint and opens a `CommandDialog` | The change explicitly forbids a fake/disabled search input; the reserved slot must be honest about pre-launch state |
+| Four sidebar groups (`navMain` with sub-items, `projects`, `navSecondary`, plus user) | Reduce to: workspace switcher in `SidebarHeader`, one nav group of two destinations (Overview, Transcripts) in `SidebarContent`, user menu in `SidebarFooter` | The product has only two workspace destinations; keeping four groups would read as under-furnished chrome |
+| `SidebarMenuButton size="lg"` brand row in `SidebarHeader` linking nowhere | Workspace switcher: `DropdownMenu` triggered by `SidebarMenuButton size="lg"` listing the user's workspaces, with the active workspace marked and a "Switch workspace" action | `workspace-foundation` supports multi-workspace membership and the shell must surface that |
+| `IconPlaceholder` shim for icons | `@remixicon/react` icons (`RiSearchLine`, `RiCommandLine`, `RiSettingsLine`, `RiArrowUpDownLine`, `RiLayoutLeftLine`, …) | Project `iconLibrary` is `remixicon`; `IconPlaceholder` is registry scaffolding only |
+| `<a href>` anchors | `next/link` via `asChild` on `SidebarMenuButton` and `BreadcrumbLink` | Stay inside the Next.js App Router |
+| Sidebar collapse mode unset on `SidebarProvider` | `collapsible="icon"` configured on `SidebarProvider` and verified per region | Tasks 2.2 require every region to render in icon-collapsed state |
+
+### Components added on top of the block
+
+| Use in the shell | Component | CLI |
+| --- | --- | --- |
+| `CommandDialog` containing `Command` + `CommandInput` + `CommandList` + `CommandEmpty` (no `CommandItem`s in this change), opened by header icon click and by `⌘K` / `Ctrl+K` | `command` (also pulls `dialog`) | `pnpm dlx shadcn@latest add command` |
+| Tooltip on a truncated final breadcrumb crumb showing the full label, plus tooltips on icon-only header controls (search trigger, theme toggle) | `tooltip` | `pnpm dlx shadcn@latest add tooltip` |
+| Visible `⌘K` / `Ctrl+K` hint inside the header search trigger button — must adapt to the user's platform (`⌘K` on macOS, `Ctrl+K` elsewhere) | `kbd` (`Kbd` or `KbdGroup`) | `pnpm dlx shadcn@latest add kbd` |
+| Mobile sidebar (the sidebar primitive renders itself inside a `Sheet` on small viewports) — DO NOT add a second sheet for the sidebar | `sheet` (transitively pulled by `sidebar`; verify with `shadcn info`) | usually already present after `sidebar-16` |
+| Toast surface for the theme toggle confirmation, sidebar errors, and any future shell-level non-blocking errors | `sonner` (use `toast()` from `sonner`, never custom alert divs for transient feedback) | `pnpm dlx shadcn@latest add sonner` |
+
+Bulk install on top of the block:
+
+```bash
+pnpm dlx shadcn@latest add command tooltip kbd sonner
+```
+
+### Composition notes for the implementer
+
+- **CommandDialog wiring.** Compose `CommandDialog` once at the shell layout level and expose an open/close handle through a small client provider. Inside, render only `Command` + `CommandInput` + `CommandList` + `CommandEmpty`. The empty state MUST react to typing (e.g. echo the query as `nothing to search yet`); do not render a static `CommandEmpty` string.
+- **`⌘K` shortcut suppression.** Wire the keyboard shortcut at the shell provider, not inside the dialog itself. Skip the open when `document.activeElement` is an `<input>` / `<textarea>` / element with `contenteditable` inside an active transcript edit session — see existing transcript edit session handling in `app/components/features/transcripts/`.
+- **Header trigger button.** `Button variant="ghost" size="sm"` with a `RiSearchLine` icon (`data-icon="inline-start"`), the visible label `Search` (or `sr-only` on small viewports), and a trailing `<Kbd>` showing the platform-adapted shortcut. Do NOT render a `<input>` here.
+- **Theme toggle.** Use the existing theme provider; expose it via an icon-only `Button variant="ghost" size="icon"` with a `Tooltip` describing the action. The toggle stays in the header (Decisions section): do not move it inside the user menu.
+- **User menu in the sidebar footer.** Reuse the `nav-user.tsx` scaffolding from `sidebar-16` but: replace `IconPlaceholder` with remix icons; populate the menu items from the existing `account-security`, `account-close`, and `sign-out` entries; route the avatar fallback to user initials computed from name/email.
+- **Workspace switcher.** Use `DropdownMenu` over `SidebarMenuButton size="lg"`. Each item is a workspace; on selection, navigate to that workspace's overview route (`/w/[slug]`). Mark the active workspace with `RiCheckLine`.
+- **Breadcrumb root.** Always render the workspace name as the first crumb on workspace-scoped routes. Use `BreadcrumbList` + `BreadcrumbItem` + `BreadcrumbLink` + `BreadcrumbSeparator` + `BreadcrumbPage`. The `BreadcrumbEllipsis` collapsing dropdown is the standard radix dropdown bound to the middle crumbs when the chain still overflows after the final crumb truncates.
+- **Sidebar transcripts count.** Render as `<span className="ml-auto text-xs text-muted-foreground">{count}</span>` inside the `SidebarMenuButton` for the Transcripts destination. Source the count from the existing workspace transcript library read; cache it in a shell-level provider per Decision "The sidebar's transcripts count reuses the existing workspace transcript read".
+- **Sticky breadcrumb band.** Render inside `SidebarInset` as `<div className="sticky top-0 z-10 bg-background/95 backdrop-blur ...">` (semantic tokens only — never raw colors); content-width on desktop, full-viewport on mobile.
+- **Forbidden patterns from `.agents/skills/shadcn/SKILL.md`.** No `space-y-*` for vertical stacks (use `flex flex-col gap-*`), no manual `dark:` color overrides (semantic tokens only), no `w-X h-X` when equal (`size-X`), no manual `z-index` on overlay components (Dialog, Sheet, DropdownMenu, Popover handle their own stacking), no raw `<a>` tags inside shell navigation.
+
 ## Migration Plan
 
 1. Install shadcn `sidebar` and `command` components via the shadcn skill and compose them locally; do not inline third-party templates.
