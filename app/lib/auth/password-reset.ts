@@ -128,7 +128,7 @@ async function sendPasswordResetEmail(args: { to: string; userName?: string; tok
   const env = getServerEnv();
   const adapter = getEmailAdapter();
   const base = new URL(env.BETTER_AUTH_URL);
-  base.pathname = "/auth/reset-password";
+  base.pathname = "/reset-password";
   base.searchParams.set("token", args.token);
 
   await adapter.send({

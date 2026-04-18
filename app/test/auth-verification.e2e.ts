@@ -8,15 +8,17 @@ test.beforeEach(async ({ request }) => {
   await resetDatabase(request);
 });
 
-test("verification link activates the account", async ({ page, request }) => {
+test("verification link activates the account and lands on the dashboard", async ({ page, request }) => {
   const email = `verify-${Date.now()}@example.com`;
   await signUpUser(page, email, "super-secret-pass-1234");
 
   const emailMessage = await waitForEmail(request, email, "verification");
+  expect(emailMessage.url).toContain("/verify-email?token=");
   const token = extractTokenFromUrl(emailMessage.url);
 
   await page.goto(`/verify-email?token=${token}`);
-  await expect(page.getByRole("status")).toContainText("Your email is verified");
+  await page.waitForURL("**/dashboard");
+  await expect(page.getByRole("heading", { level: 1 })).toContainText("Welcome back");
 });
 
 test("expired or consumed tokens surface a retry path", async ({ page, request }) => {
@@ -26,7 +28,7 @@ test("expired or consumed tokens surface a retry path", async ({ page, request }
   const token = extractTokenFromUrl(message.url);
 
   await page.goto(`/verify-email?token=${token}`);
-  await expect(page.getByRole("status")).toContainText("Your email is verified");
+  await page.waitForURL("**/dashboard");
 
   await page.goto(`/verify-email?token=${token}`);
   await expect(page.getByRole("alert")).toContainText(/expired|already used|invalid/i);
@@ -51,5 +53,5 @@ test("resend verification issues a new email and invalidates the previous one", 
   await expect(page.getByRole("alert")).toContainText(/expired|already used|invalid/i);
 
   await page.goto(`/verify-email?token=${secondToken}`);
-  await expect(page.getByRole("status")).toContainText("Your email is verified");
+  await page.waitForURL("**/dashboard");
 });

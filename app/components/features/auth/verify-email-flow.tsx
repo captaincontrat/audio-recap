@@ -36,8 +36,14 @@ export function VerifyEmailFlow({ searchParamsPromise }: { searchParamsPromise: 
         return;
       }
       if (payload.ok) {
+        // Sign-up auto-creates a session (see `emailAndPassword.autoSignIn`
+        // in `lib/auth/instance.ts`), so the moment the DB flips the user to
+        // `emailVerified=true` the dashboard guard will admit this browser.
+        // Keep the success status for the brief window before the navigation
+        // lands so users get confirmation even on slow networks.
         const message = payload.alreadyVerified ? translate("auth.verifyEmail.alreadyVerified") : translate("auth.verifyEmail.success");
         setStatus({ type: "success", message });
+        router.push("/dashboard");
         router.refresh();
         return;
       }

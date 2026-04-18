@@ -124,7 +124,7 @@ export async function sendVerificationEmail(args: { to: string; userName?: strin
   const env = getServerEnv();
   const adapter = getEmailAdapter();
   const base = new URL(env.BETTER_AUTH_URL);
-  base.pathname = "/auth/verify-email";
+  base.pathname = "/verify-email";
   base.searchParams.set("token", args.token);
 
   await adapter.send({

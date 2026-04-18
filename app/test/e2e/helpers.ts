@@ -53,7 +53,10 @@ export async function verifyUser(request: APIRequestContext, page: Page, email: 
   const verification = await waitForEmail(request, email, "verification");
   const token = extractTokenFromUrl(verification.url);
   await page.goto(`/verify-email?token=${token}`);
-  await expect(page.getByRole("status")).toContainText("Your email is verified");
+  // Verification auto-redirects to the dashboard because the sign-up session
+  // is already in place; waiting on the URL is more reliable than the
+  // success status, which may flash only briefly before navigation.
+  await page.waitForURL("**/dashboard");
 }
 
 export async function signIn(page: Page, email: string, password: string): Promise<void> {
