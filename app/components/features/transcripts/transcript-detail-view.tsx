@@ -6,6 +6,8 @@ import { TranscriptCurationPanel } from "@/components/features/transcripts/trans
 import { TranscriptExportPanel } from "@/components/features/transcripts/transcript-export-panel";
 import { TranscriptSharePanel, type ShareUpdate } from "@/components/features/transcripts/transcript-share-panel";
 import { Button } from "@/components/ui/button";
+import { usePushFinalCrumb } from "@/components/workspace-shell/breadcrumb-context";
+import { usePublishEditSessionPresence } from "@/components/workspace-shell/edit-session-presence-context";
 import { useEditSession } from "@/lib/client/edit-sessions";
 import { cn } from "@/lib/utils";
 
@@ -130,6 +132,19 @@ export function TranscriptDetailView({ workspaceSlug, transcriptId, initial, can
   }, [canEditMarkdown, tryResume]);
 
   const isEditing = editSession.status.kind === "editing" || editSession.status.kind === "saving" || editSession.status.kind === "entering";
+
+  // Publish the live display title to the workspace shell's breadcrumb
+  // band so the final crumb reads as a human-readable transcript title
+  // instead of the opaque transcript id segment. The hook is a no-op
+  // when the view is mounted outside the shell (e.g., a future
+  // standalone preview), so the detail view stays portable.
+  usePushFinalCrumb(state.displayTitle);
+
+  // Tell the shell's `⌘K` listener to back off while the user is in an
+  // active edit session. Combined with the palette's active-element
+  // check this satisfies the spec rule that the global shortcut must
+  // not steal focus from an in-progress edit.
+  usePublishEditSessionPresence(isEditing);
 
   const isProcessing = !(state.status === "completed" || state.status === "failed");
   const editableBlocked = !canEditMarkdown || isProcessing || state.status === "failed";

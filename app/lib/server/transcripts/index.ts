@@ -79,6 +79,7 @@ export {
 } from "./projections";
 export {
   ACTIVE_WORK_STATUSES,
+  countTranscriptsForWorkspace,
   findTranscriptDetailForWorkspace,
   listActiveWorkTranscriptsForWorkspace,
   listLibraryHighlightsForWorkspace,

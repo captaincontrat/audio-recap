@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import { usePushFinalCrumb } from "@/components/workspace-shell/breadcrumb-context";
 import { cn } from "@/lib/utils";
 
 type Status = "queued" | "preprocessing" | "transcribing" | "generating_recap" | "generating_title" | "finalizing" | "retrying" | "completed" | "failed";
@@ -32,6 +33,13 @@ const POLL_INTERVAL_MS = 4_000;
 export function TranscriptStatusView({ workspaceSlug, transcriptId, initial }: Props) {
   const [state, setState] = useState<TranscriptView>(initial);
   const [pollError, setPollError] = useState<string | null>(null);
+
+  // Publish the meeting title to the workspace shell's breadcrumb band
+  // so the final crumb reads as a human-readable label as soon as the
+  // worker has one. The fallback is "Meeting status" so the band is
+  // never just a shortened transcript id while the worker is still
+  // titling. The hook is a no-op outside the shell.
+  usePushFinalCrumb(state.title && state.title.trim().length > 0 ? state.title : "Meeting status");
 
   useEffect(() => {
     if (TERMINAL.includes(state.status)) {

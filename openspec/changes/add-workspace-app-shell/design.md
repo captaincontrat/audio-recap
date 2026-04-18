@@ -92,13 +92,14 @@ Keeping those contracts out of this change lets the shell ship with one well-def
 - Over shipping the shell around account pages in this change: the non-workspace breadcrumb root and default-workspace resolution are structural contracts worth their own proposal, and mixing them into shell introduction doubles the review surface.
 - Over never hosting account pages inside a shell: the account-pages change explicitly argues for the shell-hosted approach; this change just defers that decision's implementation.
 
-### Decision: The sidebar's transcripts count reuses the existing workspace transcript read
+### Decision: The sidebar's transcripts count reuses the existing workspace transcript read model
 
-The sidebar's middle nav shows a total library count next to the transcripts destination as a subtle density cue. The count is read from the existing workspace-scoped transcript library read used by `private-transcript-library`; no new endpoint is introduced. The count is fetched once per shell mount for the current workspace and cached in a provider used by the sidebar, so that navigating inside the shell does not refetch it on every route transition.
+The sidebar's middle nav shows a total library count next to the transcripts destination as a subtle density cue. The count is read from the same workspace-scoped `transcript` table that backs the `private-transcript-library` capability and lives next to `listTranscriptsForWorkspace` as a count-only complement (`countTranscriptsForWorkspace`); no new HTTP endpoint or parallel read model is introduced, and the helper applies the exact same workspace scoping rule (`eq(transcript.workspaceId, …)`) the library surface uses, so the count and the library list cannot drift. The count is fetched once per shell mount for the current workspace and cached in a provider used by the sidebar, so that navigating inside the shell does not refetch it on every route transition.
 
 **Why this over alternatives**
 
-- Over inventing a dedicated sidebar-count endpoint: the data already exists in the workspace transcript library read, and creating a parallel count source risks drift.
+- Over inventing a dedicated sidebar-count endpoint: the data already lives in the same workspace-scoped read model, and exposing a second source of truth risks drift.
+- Over reusing `listTranscriptsForWorkspace` and counting `result.items.length`: that read paginates and would force the shell to either fetch and discard rows just to total them or invent a "no-pagination" mode that other callers do not need; a count-only complement against the same `transcript` table with the same workspace scoping is strictly cheaper and keeps both reads honest about what they return.
 - Over recomputing the count on every navigation: the number is a density cue, not a live counter, and recomputing it per transition would be wasteful and could produce flicker.
 
 ## Risks / Trade-offs

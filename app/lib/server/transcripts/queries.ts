@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, arrayContains, asc, desc, eq, ilike, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
+import { and, arrayContains, asc, count, desc, eq, ilike, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 
 import { getDb } from "@/lib/server/db/client";
 import { type TranscriptRow, type TranscriptStatus, transcript } from "@/lib/server/db/schema";
@@ -158,6 +158,20 @@ const overviewSummarySelect = {
   updatedAt: transcript.updatedAt,
   completedAt: transcript.completedAt,
 };
+
+// Total number of transcripts in a workspace, used by the workspace
+// app shell as a subtle density cue next to the Transcripts nav
+// destination. The shell relies on the same workspace-scoped read
+// model the library surface does (see `library-read.ts`); this helper
+// is the count-only complement of `listTranscriptsForWorkspace` so the
+// shell does not need to fetch and discard rows just to derive a
+// total. No filtering is applied — the value reflects the full
+// workspace library, matching what the user would see if they
+// cleared every filter on the library surface.
+export async function countTranscriptsForWorkspace(args: { workspaceId: string }): Promise<number> {
+  const rows = await getDb().select({ value: count() }).from(transcript).where(eq(transcript.workspaceId, args.workspaceId));
+  return rows[0]?.value ?? 0;
+}
 
 // Detail fetch scoped to a single workspace. Returns null when the
 // transcript does not exist or belongs to a different workspace so the

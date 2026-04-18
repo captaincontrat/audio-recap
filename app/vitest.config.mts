@@ -167,6 +167,19 @@ export default defineConfig({
         "app/**/not-found.tsx",
         "app/api/**",
         "components/features/**",
+        // Workspace-shell chrome components (sidebar regions, header
+        // ribbon, breadcrumb band, command palette wiring) are
+        // composition-heavy view layers that wire server-resolved data
+        // and a small provider stack to the page frame. They are
+        // exercised end-to-end through the Playwright workspace shell
+        // smokes; the focused jsdom tests in
+        // `test/components/workspace-shell/` cover the discrete
+        // regression behaviors called out in `add-workspace-app-shell`
+        // tasks 7.1–7.4 (shell composition, breadcrumb truncation,
+        // CommandDialog open paths + edit-session shortcut
+        // suppression, and the route-boundary assertions in
+        // `test/app/route-boundaries.test.ts`).
+        "components/workspace-shell/**",
         "middleware.ts",
         "worker/**",
       ],
