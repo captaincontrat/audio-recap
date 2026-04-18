@@ -3,9 +3,32 @@
 // through this module so the capability can evolve its file layout
 // without breaking downstream call sites.
 
+export {
+  AUTOSAVE_DEBOUNCE_MS,
+  autosaveMarkdown,
+  type AutosaveInputs,
+  type AutosaveResult,
+  EDIT_LOCK_FIELDS,
+  type EditLockField,
+  type EditSessionContext,
+  editSessionRefusalToHttpStatus,
+  enterEditSession,
+  type EnterSessionInputs as EnterEditSessionInputs,
+  exitEditSession,
+  generateTabSessionId,
+  type MarkdownSavePatch,
+  RESUME_RECONNECT_WINDOW_MS,
+  resumeEditSession,
+  type ResumeSessionInputs as ResumeEditSessionInputs,
+  sanitizeMarkdownPatch,
+  SESSION_EXPIRY_MS,
+  type SessionRefusalReason,
+  SessionRefusedError,
+} from "./edit-sessions";
+
 export { CursorDecodeError, type CursorPayload, decodeCursor, encodeCursor } from "./cursor";
 
-export { type DetailReadInputs, readTranscriptDetail } from "./detail-read";
+export { type DetailReadInputs, type DetailReadWithRoleResult, readTranscriptDetail, readTranscriptDetailWithRole } from "./detail-read";
 
 export { DISPLAY_TITLE_FALLBACK, type DisplayTitleSource, deriveDisplayTitle, deriveDisplayTitleFromRow } from "./display-title";
 

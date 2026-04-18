@@ -4,7 +4,8 @@ import { notFound, redirect } from "next/navigation";
 
 import { TranscriptDetailView, type DetailView } from "@/components/features/transcripts/transcript-detail-view";
 import { evaluateProtectedRoute } from "@/lib/auth/guards";
-import { DetailReadRefusedError, readTranscriptDetail, toDetailView } from "@/lib/server/transcripts";
+import type { WorkspaceRole } from "@/lib/server/db/schema";
+import { DetailReadRefusedError, readTranscriptDetailWithRole, toDetailView } from "@/lib/server/transcripts";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -35,9 +36,11 @@ export default async function TranscriptDetailPage({ params }: { params: Promise
   const { slug, transcriptId } = await params;
 
   let initial: DetailView;
+  let role: WorkspaceRole;
   try {
-    const row = await readTranscriptDetail({ workspaceSlug: slug, userId: auth.context.user.id, transcriptId });
-    initial = toDetailView(row);
+    const result = await readTranscriptDetailWithRole({ workspaceSlug: slug, userId: auth.context.user.id, transcriptId });
+    initial = toDetailView(result.row);
+    role = result.role;
   } catch (error) {
     if (error instanceof DetailReadRefusedError) {
       if (error.reason === "not_found" || error.reason === "access_denied") {
@@ -50,6 +53,8 @@ export default async function TranscriptDetailPage({ params }: { params: Promise
     throw error;
   }
 
+  const canEditMarkdown = role === "admin" || role === "member";
+
   return (
     <main className="mx-auto flex min-h-svh max-w-3xl flex-col gap-6 p-6">
       <nav className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -57,7 +62,7 @@ export default async function TranscriptDetailPage({ params }: { params: Promise
           ← All transcripts
         </Link>
       </nav>
-      <TranscriptDetailView workspaceSlug={slug} transcriptId={transcriptId} initial={initial} />
+      <TranscriptDetailView workspaceSlug={slug} transcriptId={transcriptId} initial={initial} canEditMarkdown={canEditMarkdown} />
     </main>
   );
 }

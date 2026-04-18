@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { useEditSession } from "@/lib/client/edit-sessions";
 import { cn } from "@/lib/utils";
 
 // Mirrors the shape returned by `toDetailView` on the server. Client
@@ -27,21 +28,21 @@ type Props = {
   workspaceSlug: string;
   transcriptId: string;
   initial: DetailView;
+  canEditMarkdown: boolean;
 };
 
 type FetchState = { kind: "idle" } | { kind: "refreshing" } | { kind: "error"; message: string };
 
-// Interactive detail view. The server component is responsible for
-// the not-found / archived / access-denied branches before this
-// component ever renders, so here we only own:
+// Interactive detail view. The server component owns the not-found /
+// archived / access-denied branches, so here we own:
 //   - the current snapshot of the detail view
-//   - a refresh button that re-fetches the detail payload (the spec
-//     calls this "retry from recoverable fetch errors")
-//   - a "refreshing" loading state and a fetch-error state that
-//     stays visible until the retry succeeds
-export function TranscriptDetailView({ workspaceSlug, transcriptId, initial }: Props) {
+//   - a refresh button that re-fetches the detail payload
+//   - the edit-session entry / autosave / exit flow for markdown
+//     content when the caller's workspace role allows it
+export function TranscriptDetailView({ workspaceSlug, transcriptId, initial, canEditMarkdown }: Props) {
   const [state, setState] = useState<DetailView>(initial);
   const [fetchState, setFetchState] = useState<FetchState>({ kind: "idle" });
+  const editSession = useEditSession({ workspaceSlug, transcriptId, canEdit: canEditMarkdown });
 
   const refresh = useCallback(async () => {
     setFetchState({ kind: "refreshing" });
@@ -57,7 +58,37 @@ export function TranscriptDetailView({ workspaceSlug, transcriptId, initial }: P
     }
   }, [workspaceSlug, transcriptId]);
 
+  // When an edit session exits (either from an expiry or an explicit
+  // user action), re-sync the read-only state with whatever made it to
+  // the server. This avoids showing stale read-only copy right after a
+  // successful save followed by exit.
+  useEffect(() => {
+    if (editSession.status.kind === "exited") {
+      void refresh();
+    }
+  }, [editSession.status.kind, refresh]);
+
+  // Same-tab resume on mount: if this page load is actually a refresh
+  // of an already-active edit session, the hook finds the stored tab
+  // identity and asks the server to resume. The spec gives us up to 10
+  // seconds from the last successful autosave to do this; any refusal
+  // keeps the user on the read-only view and requires an explicit
+  // "Edit" click to start a new session. We guard with a ref so
+  // renders triggered by `tryResume` updating the hook state do not
+  // kick off a second resume attempt.
+  const didAttemptResumeRef = useRef(false);
+  const tryResume = editSession.tryResume;
+  useEffect(() => {
+    if (!canEditMarkdown) return;
+    if (didAttemptResumeRef.current) return;
+    didAttemptResumeRef.current = true;
+    void tryResume();
+  }, [canEditMarkdown, tryResume]);
+
+  const isEditing = editSession.status.kind === "editing" || editSession.status.kind === "saving" || editSession.status.kind === "entering";
+
   const isProcessing = !(state.status === "completed" || state.status === "failed");
+  const editableBlocked = !canEditMarkdown || isProcessing || state.status === "failed";
 
   return (
     <article className="flex flex-col gap-6">
@@ -67,10 +98,26 @@ export function TranscriptDetailView({ workspaceSlug, transcriptId, initial }: P
           <StatusBadge status={state.status} />
         </div>
         <DetailMetadata state={state} />
-        <div className="flex items-center gap-2">
-          <Button type="button" size="sm" variant="outline" onClick={refresh} disabled={fetchState.kind === "refreshing"}>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button type="button" size="sm" variant="outline" onClick={refresh} disabled={fetchState.kind === "refreshing" || isEditing}>
             {fetchState.kind === "refreshing" ? "Refreshing…" : "Refresh"}
           </Button>
+          <EditControls
+            canEdit={canEditMarkdown && !editableBlocked}
+            editableBlockedReason={
+              !canEditMarkdown
+                ? "Only members and admins can edit transcript markdown."
+                : isProcessing
+                  ? "Editing becomes available once processing completes."
+                  : state.status === "failed"
+                    ? "Editing is disabled for transcripts that failed processing."
+                    : null
+            }
+            status={editSession.status}
+            onEnter={editSession.enter}
+            onExit={editSession.exit}
+            onDismissError={editSession.dismissError}
+          />
           {fetchState.kind === "refreshing" ? <p className="text-xs text-muted-foreground">Fetching latest content…</p> : null}
           {fetchState.kind === "error" ? (
             <p role="alert" className="text-xs text-destructive">
@@ -78,6 +125,7 @@ export function TranscriptDetailView({ workspaceSlug, transcriptId, initial }: P
             </p>
           ) : null}
         </div>
+        <SessionBanner status={editSession.status} />
       </header>
 
       {state.status === "failed" ? (
@@ -86,9 +134,141 @@ export function TranscriptDetailView({ workspaceSlug, transcriptId, initial }: P
         <ProcessingNotice status={state.status} />
       ) : null}
 
-      <DetailSection title="Recap" markdown={state.recapMarkdown} />
-      <DetailSection title="Transcript" markdown={state.transcriptMarkdown} variant="transcript" />
+      {isEditing && editSession.draft ? (
+        <EditableSections draft={editSession.draft} onChange={editSession.setDraft} status={editSession.status} />
+      ) : (
+        <>
+          <DetailSection title="Recap" markdown={state.recapMarkdown} />
+          <DetailSection title="Transcript" markdown={state.transcriptMarkdown} variant="transcript" />
+        </>
+      )}
     </article>
+  );
+}
+
+function EditControls(props: {
+  canEdit: boolean;
+  editableBlockedReason: string | null;
+  status: ReturnType<typeof useEditSession>["status"];
+  onEnter: () => Promise<void>;
+  onExit: () => Promise<void>;
+  onDismissError: () => void;
+}) {
+  const isEntering = props.status.kind === "entering";
+  const inSession = props.status.kind === "editing" || props.status.kind === "saving";
+
+  if (inSession) {
+    return (
+      <Button type="button" size="sm" variant="secondary" onClick={() => void props.onExit()}>
+        Finish editing
+      </Button>
+    );
+  }
+
+  if (!props.canEdit) {
+    return props.editableBlockedReason ? <p className="text-xs text-muted-foreground">{props.editableBlockedReason}</p> : null;
+  }
+
+  return (
+    <Button type="button" size="sm" onClick={() => void props.onEnter()} disabled={isEntering}>
+      {isEntering ? "Opening editor…" : "Edit"}
+    </Button>
+  );
+}
+
+function SessionBanner({ status }: { status: ReturnType<typeof useEditSession>["status"] }) {
+  if (status.kind === "error") {
+    return (
+      <p role="alert" className="rounded-md border border-destructive/40 bg-destructive/10 p-2 text-xs text-destructive">
+        {status.message}
+      </p>
+    );
+  }
+  if (status.kind === "exited") {
+    return (
+      <p
+        role="status"
+        className={cn(
+          "rounded-md border p-2 text-xs",
+          status.reason === "expired" || status.reason === "lost"
+            ? "border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-200"
+            : status.reason === "archived"
+              ? "border-amber-500/40 bg-amber-500/10 text-amber-800 dark:text-amber-200"
+              : "border-border/60 bg-muted/30 text-muted-foreground",
+        )}
+      >
+        {exitMessage(status.reason)}
+      </p>
+    );
+  }
+  if (status.kind === "editing" || status.kind === "saving") {
+    return <p className="rounded-md border border-border/60 bg-muted/20 p-2 text-xs text-muted-foreground">{savedLabel(status)}</p>;
+  }
+  return null;
+}
+
+function savedLabel(status: Extract<ReturnType<typeof useEditSession>["status"], { kind: "editing" | "saving" }>): string {
+  if (status.kind === "saving") return "Saving…";
+  if (status.pending) return "Changes pending autosave…";
+  if (status.savedAt) return `Saved at ${new Date(status.savedAt).toLocaleTimeString()}.`;
+  return "Ready to edit. Autosave runs ~1 second after you stop typing.";
+}
+
+function exitMessage(reason: "user" | "expired" | "lost" | "archived"): string {
+  switch (reason) {
+    case "expired":
+      return "Your edit session has expired. Re-enter edit mode to continue making changes.";
+    case "lost":
+      return "Your edit session was lost. Re-enter edit mode to continue making changes.";
+    case "archived":
+      return "This workspace was archived. Editing is no longer available.";
+    case "user":
+      return "Edits saved. Editor closed.";
+    default: {
+      const exhaustive: never = reason;
+      throw new Error(`Unhandled edit-session exit reason: ${String(exhaustive)}`);
+    }
+  }
+}
+
+function EditableSections(props: {
+  draft: { transcriptMarkdown: string; recapMarkdown: string };
+  onChange: (next: Partial<{ transcriptMarkdown: string; recapMarkdown: string }>) => void;
+  status: ReturnType<typeof useEditSession>["status"];
+}) {
+  const disabled = props.status.kind === "saving";
+  return (
+    <>
+      <EditableSection title="Recap" value={props.draft.recapMarkdown} disabled={disabled} onChange={(value) => props.onChange({ recapMarkdown: value })} />
+      <EditableSection
+        title="Transcript"
+        value={props.draft.transcriptMarkdown}
+        variant="transcript"
+        disabled={disabled}
+        onChange={(value) => props.onChange({ transcriptMarkdown: value })}
+      />
+    </>
+  );
+}
+
+function EditableSection(props: { title: string; value: string; variant?: "recap" | "transcript"; disabled: boolean; onChange: (value: string) => void }) {
+  const id = useMemo(() => `edit-${props.title.toLowerCase()}`, [props.title]);
+  return (
+    <section className="flex flex-col gap-2">
+      <label htmlFor={id} className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
+        {props.title}
+      </label>
+      <textarea
+        id={id}
+        value={props.value}
+        disabled={props.disabled}
+        onChange={(event) => props.onChange(event.target.value)}
+        className={cn(
+          "w-full resize-y rounded-md border border-border/60 bg-background p-4 font-sans text-sm leading-relaxed text-foreground",
+          props.variant === "transcript" ? "min-h-[32rem]" : "min-h-[12rem]",
+        )}
+      />
+    </section>
   );
 }
 

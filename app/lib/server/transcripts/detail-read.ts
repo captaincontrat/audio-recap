@@ -1,6 +1,6 @@
 import "server-only";
 
-import type { TranscriptRow } from "@/lib/server/db/schema";
+import type { TranscriptRow, WorkspaceRole } from "@/lib/server/db/schema";
 import { isWorkspaceActive } from "@/lib/server/workspaces/archival-state";
 import { WorkspaceAccessDeniedError, WorkspaceNotFoundError } from "@/lib/server/workspaces/errors";
 import { resolveWorkspaceContextFromSlug } from "@/lib/server/workspaces/resolver";
@@ -22,7 +22,21 @@ export type DetailReadInputs = {
   transcriptId: string;
 };
 
+export type DetailReadWithRoleResult = {
+  row: TranscriptRow;
+  role: WorkspaceRole;
+};
+
 export async function readTranscriptDetail(inputs: DetailReadInputs): Promise<TranscriptRow> {
+  const { row } = await readTranscriptDetailWithRole(inputs);
+  return row;
+}
+
+// Variant used by surfaces that need the caller's workspace role (for
+// example the edit-session entry flow - only `member` and `admin` can
+// acquire a markdown lock). Collapsed with `readTranscriptDetail` to
+// avoid double resolution of the workspace context.
+export async function readTranscriptDetailWithRole(inputs: DetailReadInputs): Promise<DetailReadWithRoleResult> {
   const context = await resolveContextOrRefuse(inputs);
 
   if (!isWorkspaceActive(context.workspace)) {
@@ -33,7 +47,7 @@ export async function readTranscriptDetail(inputs: DetailReadInputs): Promise<Tr
   if (!row) {
     throw new DetailReadRefusedError("not_found");
   }
-  return row;
+  return { row, role: context.role };
 }
 
 async function resolveContextOrRefuse(inputs: DetailReadInputs) {

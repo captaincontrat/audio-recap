@@ -90,6 +90,18 @@ export default defineConfig({
         "lib/server/transcripts/library-read.ts",
         "lib/server/transcripts/detail-read.ts",
         "lib/server/transcripts/index.ts",
+        // `transcript-edit-sessions` runtime modules touch Redis, the
+        // Drizzle client, or the workspace-archive side-effect
+        // registry. Pure decision logic (session-decisions,
+        // http-status, errors, constants, ids, sanitize/buildUpdate
+        // helpers in persistence) is unit-tested directly; the
+        // Redis-/DB-/registry-touching surface is exercised through
+        // the Playwright e2e harness and the API routes.
+        "lib/server/transcripts/edit-sessions/locks.ts",
+        "lib/server/transcripts/edit-sessions/persistence.ts",
+        "lib/server/transcripts/edit-sessions/session-service.ts",
+        "lib/server/transcripts/edit-sessions/archive-side-effect.ts",
+        "lib/server/transcripts/edit-sessions/index.ts",
         "lib/server/storage/download.ts",
         // Client-side submission orchestration hits `fetch`, browser
         // upload, and the presigned URL flow end-to-end. It is covered
@@ -100,6 +112,17 @@ export default defineConfig({
         // ffmpeg.wasm integration that lands in a later change.
         "lib/client/meeting-submission.ts",
         "lib/client/media-normalization.ts",
+        // Client-side edit-session network glue hits `fetch`, and the
+        // `use-edit-session` hook orchestrates debounce timers,
+        // autosave renewal, and same-tab resume on top of it. Both
+        // layers are exercised end-to-end through the Playwright
+        // harness; the pure decision logic, error classes, HTTP
+        // status mapping, constants, and `sessionStorage` tab
+        // identity helpers in the sibling modules are unit-tested
+        // directly.
+        "lib/client/edit-sessions/client.ts",
+        "lib/client/edit-sessions/use-edit-session.ts",
+        "lib/client/edit-sessions/index.ts",
         "instrumentation.ts",
         // Next.js pages and route handlers are covered by Playwright
         // end-to-end tests. They are thin view layers that wire imported

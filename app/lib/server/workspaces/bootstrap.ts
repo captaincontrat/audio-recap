@@ -1,5 +1,6 @@
 import "server-only";
 
+import { registerEditSessionsArchiveSideEffect } from "@/lib/server/transcripts/edit-sessions/archive-side-effect";
 import { registerInvitationArchiveSideEffect } from "./invitation-archive-effect";
 
 // Single call site where every workspace capability registers its
@@ -11,4 +12,5 @@ import { registerInvitationArchiveSideEffect } from "./invitation-archive-effect
 // wiring via `registerWorkspaceArchiveSideEffects()`.
 export function registerWorkspaceArchiveSideEffects(): void {
   registerInvitationArchiveSideEffect();
+  registerEditSessionsArchiveSideEffect();
 }
