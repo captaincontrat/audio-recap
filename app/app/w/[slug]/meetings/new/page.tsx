@@ -58,8 +58,8 @@ export default async function NewMeetingPage({ params }: { params: Promise<{ slu
   return (
     <main className="mx-auto flex min-h-svh max-w-2xl flex-col gap-8 p-6">
       <header className="flex flex-col gap-2">
-        <Link href="/dashboard" className="text-xs text-muted-foreground hover:underline">
-          ← Back to dashboard
+        <Link href={`/w/${encodeURIComponent(slug)}`} className="text-xs text-muted-foreground hover:underline">
+          ← Workspace overview
         </Link>
         <h1 className="text-2xl font-semibold">Submit a meeting</h1>
         <p className="text-sm text-muted-foreground">

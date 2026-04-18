@@ -1,0 +1,56 @@
+# workspace-overview Specification
+
+## Purpose
+
+Defines the workspace overview route at `w/[slug]` that serves as the canonical landing surface for a resolved current workspace. The overview composes existing workspace-scoped transcript reads from `private-transcript-library` into two activity projections — an active-work group (transcripts whose processing has not reached a terminal successful state, plus terminal failed transcripts surfaced as attention-worthy) and a library-highlights group (recently updated transcripts) — and provides direct navigation into the full transcript library plus a transcript-creation-gated start-upload CTA into the existing dedicated meeting-submission surface. Inherits the explicit workspace route context, role-based access model, and archived-workspace behavior from `workspace-foundation` and `workspace-archival-lifecycle` rather than inventing a separate access model. Does not introduce any new workspace-scoped server endpoints, a shared private workspace shell, or shell-level upload entry points; those belong to follow-up changes.
+
+## Requirements
+
+### Requirement: Each accessible workspace has an overview route
+The system SHALL provide a workspace overview route at the current workspace root, `w/[slug]`, for verified authenticated users with read access in that workspace. The overview SHALL use the explicit workspace route context defined by `workspace-foundation`, and it SHALL behave like other private workspace surfaces for inaccessible or archived workspaces rather than inventing a separate access model.
+
+#### Scenario: User opens an active workspace overview
+- **WHEN** a verified authenticated user with read access opens `w/[slug]` for an active workspace
+- **THEN** the system renders the overview page for that workspace
+
+#### Scenario: Inaccessible workspace overview stays hidden
+- **WHEN** a user requests `w/[slug]` for a workspace they cannot access
+- **THEN** the system responds with the same not-found behavior used for other private workspace-scoped routes
+
+#### Scenario: Archived workspace overview shows inactive-workspace behavior
+- **WHEN** a user requests `w/[slug]` for a workspace that is archived
+- **THEN** the system refuses the normal active overview and shows the archived-workspace behavior used by private workspace surfaces
+
+### Requirement: The workspace overview summarizes current workspace activity
+The workspace overview SHALL summarize the current workspace rather than acting as an account settings page. The overview MUST surface two workspace-scoped activity groups: an active-work group that combines transcripts whose processing has not yet reached a terminal successful state (including queued, preprocessing, transcribing, generating_recap, generating_title, finalizing, and retrying) together with transcripts in terminal failed states, and a library-highlights group that surfaces recently updated transcripts the user can open. Transcripts in terminal failed states MUST appear inside the active-work group as attention-worthy items so the user notices them without switching pages. The overview SHALL also provide direct navigation into the full transcript library and, for users with transcript-creation access, a start-upload call-to-action.
+
+#### Scenario: Overview shows active work with failed items surfaced
+- **WHEN** the current workspace contains a mix of non-terminal transcripts and transcripts in terminal failed states visible to the user
+- **THEN** the overview shows them together inside the active-work group and marks the failed items as attention-worthy
+
+#### Scenario: Overview shows library highlights from recent transcripts
+- **WHEN** the current workspace contains recently updated transcripts the user can read
+- **THEN** the overview shows a library-highlights group summarizing those recent transcripts
+
+#### Scenario: Empty workspace overview uses an empty state
+- **WHEN** the current workspace has no visible transcript records for the current user
+- **THEN** the overview shows an empty state instead of empty summary sections
+
+#### Scenario: Read-only member sees overview without create action
+- **WHEN** a user with read-only access opens the workspace overview
+- **THEN** the overview still shows workspace activity groups but does not present a create-work CTA that implies transcript-submission access
+
+### Requirement: The overview is the product landing surface for a resolved current workspace
+The workspace overview SHALL be the default product landing page for a resolved current workspace. When the system chooses a default workspace for an authenticated user and there is no explicit private destination to preserve, the user SHALL land on that workspace's overview route rather than on a separate generic dashboard page. The overview MAY still provide deep links into dedicated transcript library or submission surfaces, but it SHALL remain the canonical workspace home.
+
+#### Scenario: Default landing opens the resolved workspace overview
+- **WHEN** the system resolves a current workspace for an authenticated user who has no explicit private destination to preserve
+- **THEN** the user lands on that workspace's overview route
+
+#### Scenario: Overview navigates into the transcript library
+- **WHEN** a user chooses to browse all transcripts from the overview
+- **THEN** the system routes them to the transcript library surface for the same workspace
+
+#### Scenario: Start-upload CTA routes to the dedicated submission surface
+- **WHEN** a user with transcript-creation access activates the start-upload CTA from the overview
+- **THEN** the system routes them to the workspace's dedicated meeting-submission surface for the same workspace

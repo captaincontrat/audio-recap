@@ -39,13 +39,18 @@ test("authenticated but unverified users trying to access /dashboard are redirec
   await expect(page).toHaveURL(/\/verify-email/);
 });
 
-test("verified users can access /dashboard directly", async ({ page, request }) => {
+test("verified users hitting /dashboard land on their default workspace overview", async ({ page, request }) => {
   const email = `verified-guard-${Date.now()}@example.com`;
   const password = "super-secret-pass-1234";
   await signUpUser(page, email, password);
   await verifyUser(request, page, email);
   await signIn(page, email, password);
 
+  // `/dashboard` is no longer a standalone page; it resolves the user's
+  // default workspace and server-side redirects to `/w/<slug>`. Asserting
+  // on the final URL pattern + the overview heading nails down both the
+  // redirect and the destination contract.
   await page.goto("/dashboard");
-  await expect(page.getByRole("heading", { level: 1 })).toContainText("Welcome back");
+  await expect(page).toHaveURL(/\/w\//);
+  await expect(page.getByRole("heading", { level: 1 })).toContainText("Workspace overview");
 });

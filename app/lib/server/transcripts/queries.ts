@@ -1,12 +1,12 @@
 import "server-only";
 
-import { and, arrayContains, asc, desc, eq, ilike, isNotNull, isNull, or, sql } from "drizzle-orm";
+import { and, arrayContains, asc, desc, eq, ilike, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 
 import { getDb } from "@/lib/server/db/client";
-import { type TranscriptRow, transcript } from "@/lib/server/db/schema";
+import { type TranscriptRow, type TranscriptStatus, transcript } from "@/lib/server/db/schema";
+import { buildTagSortKey } from "./curation/validation";
 import type { CursorPayload } from "./cursor";
 import { encodeCursor } from "./cursor";
-import { buildTagSortKey } from "./curation/validation";
 import type { TranscriptSummaryRow } from "./projections";
 import { type TranscriptLibraryItem, toLibraryItem } from "./projections";
 import type { LibraryQueryOptions } from "./query-options";
@@ -83,6 +83,81 @@ export async function listTranscriptsForWorkspace(args: ListTranscriptsForWorksp
 
   return { items, nextCursor };
 }
+
+// Workspace overview composes two narrow reads against the same table:
+// active-work and library-highlights. Both surface the standard
+// `TranscriptLibraryItem` projection so the overview UI shares the
+// library's card vocabulary without a second contract.
+
+// Active-work statuses are every status except `completed`. The
+// overview surfaces non-terminal records (in-flight processing) and
+// terminal `failed` records together so the user notices failures
+// without leaving the page. Spec source: `workspace-overview` —
+// "Overview shows active work with failed items surfaced".
+export const ACTIVE_WORK_STATUSES = [
+  "queued",
+  "preprocessing",
+  "transcribing",
+  "generating_recap",
+  "generating_title",
+  "finalizing",
+  "retrying",
+  "failed",
+] as const satisfies readonly TranscriptStatus[];
+
+export type ListOverviewTranscriptsArgs = {
+  workspaceId: string;
+  limit: number;
+};
+
+// Active-work group read for the overview. Filters status to the
+// `ACTIVE_WORK_STATUSES` set, sorts by `updatedAt DESC, id DESC` so
+// the most recently touched item leads, and caps the rowset at the
+// caller-provided limit. Returns the same library projection used by
+// the transcript library so the overview cards share the same shape.
+export async function listActiveWorkTranscriptsForWorkspace(args: ListOverviewTranscriptsArgs): Promise<TranscriptLibraryItem[]> {
+  const rows: TranscriptSummaryRow[] = await getDb()
+    .select(overviewSummarySelect)
+    .from(transcript)
+    .where(and(eq(transcript.workspaceId, args.workspaceId), inArray(transcript.status, ACTIVE_WORK_STATUSES)))
+    .orderBy(desc(transcript.updatedAt), desc(transcript.id))
+    .limit(args.limit);
+  return rows.map(toLibraryItem);
+}
+
+// Library-highlights group read for the overview. Restricts to
+// `completed` so the highlights card never overlaps with the
+// active-work group (which captures every other status). Ordered by
+// `updatedAt DESC, id DESC` so the most recently touched completed
+// transcript leads and edited recaps surface first.
+export async function listLibraryHighlightsForWorkspace(args: ListOverviewTranscriptsArgs): Promise<TranscriptLibraryItem[]> {
+  const rows: TranscriptSummaryRow[] = await getDb()
+    .select(overviewSummarySelect)
+    .from(transcript)
+    .where(and(eq(transcript.workspaceId, args.workspaceId), eq(transcript.status, "completed" satisfies TranscriptStatus)))
+    .orderBy(desc(transcript.updatedAt), desc(transcript.id))
+    .limit(args.limit);
+  return rows.map(toLibraryItem);
+}
+
+// Shared projection for overview reads. Mirrors the column set used
+// by `listTranscriptsForWorkspace` so both surfaces feed the same
+// `toLibraryItem` mapper without divergence.
+const overviewSummarySelect = {
+  id: transcript.id,
+  workspaceId: transcript.workspaceId,
+  status: transcript.status,
+  title: transcript.title,
+  customTitle: transcript.customTitle,
+  tags: transcript.tags,
+  isImportant: transcript.isImportant,
+  isPubliclyShared: transcript.isPubliclyShared,
+  sourceMediaKind: transcript.sourceMediaKind,
+  submittedWithNotes: transcript.submittedWithNotes,
+  createdAt: transcript.createdAt,
+  updatedAt: transcript.updatedAt,
+  completedAt: transcript.completedAt,
+};
 
 // Detail fetch scoped to a single workspace. Returns null when the
 // transcript does not exist or belongs to a different workspace so the

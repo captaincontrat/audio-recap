@@ -33,6 +33,23 @@ export class DetailReadRefusedError extends Error {
   }
 }
 
+// `add-workspace-overview-and-default-landing` reuses the
+// private-workspace access model. Inaccessible workspaces collapse to
+// `not_found` (so an outsider cannot probe slug existence) and
+// archived workspaces surface a distinct reason so the overview can
+// render the archived-workspace notice instead of the activity groups.
+export type OverviewReadRefusalReason = "not_found" | "access_denied" | "workspace_archived";
+
+export class OverviewReadRefusedError extends Error {
+  readonly code = "overview_read_refused" as const;
+  readonly reason: OverviewReadRefusalReason;
+  constructor(reason: OverviewReadRefusalReason, message?: string) {
+    super(message ?? defaultOverviewMessageFor(reason));
+    this.name = "OverviewReadRefusedError";
+    this.reason = reason;
+  }
+}
+
 function defaultLibraryMessageFor(reason: LibraryReadRefusalReason): string {
   switch (reason) {
     case "not_found":
@@ -61,6 +78,21 @@ function defaultDetailMessageFor(reason: DetailReadRefusalReason): string {
     default: {
       const exhaustive: never = reason;
       throw new Error(`Unhandled detail read refusal reason: ${String(exhaustive)}`);
+    }
+  }
+}
+
+function defaultOverviewMessageFor(reason: OverviewReadRefusalReason): string {
+  switch (reason) {
+    case "not_found":
+      return "Workspace not found";
+    case "access_denied":
+      return "You do not have access to this workspace";
+    case "workspace_archived":
+      return "This workspace is archived";
+    default: {
+      const exhaustive: never = reason;
+      throw new Error(`Unhandled overview read refusal reason: ${String(exhaustive)}`);
     }
   }
 }

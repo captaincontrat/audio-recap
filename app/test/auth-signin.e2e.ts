@@ -8,7 +8,7 @@ test.beforeEach(async ({ request }) => {
   await resetDatabase(request);
 });
 
-test("verified users can sign in and reach the dashboard", async ({ page, request }) => {
+test("verified users can sign in and land on their workspace overview", async ({ page, request }) => {
   const email = `signin-${Date.now()}@example.com`;
   const password = "super-secret-pass-1234";
 
@@ -16,8 +16,11 @@ test("verified users can sign in and reach the dashboard", async ({ page, reques
   await verifyUser(request, page, email);
 
   await signIn(page, email, password);
-  await expect(page).toHaveURL(/\/dashboard/);
-  await expect(page.getByRole("heading", { level: 1 })).toContainText("Welcome back");
+  // Sign-in submits with `callbackURL=/dashboard`; the dashboard route
+  // is now a server-side redirect to the user's default workspace
+  // overview, so the browser ends up on `/w/<slug>`.
+  await expect(page).toHaveURL(/\/w\//);
+  await expect(page.getByRole("heading", { level: 1 })).toContainText("Workspace overview");
 });
 
 test("unverified users are sent back to the verification flow", async ({ page }) => {
@@ -45,7 +48,7 @@ test("sign-out revokes the session", async ({ page, request }) => {
   await verifyUser(request, page, email);
   await signIn(page, email, password);
 
-  await page.waitForURL("**/dashboard");
+  await page.waitForURL(/\/w\//);
   await page.getByRole("button", { name: /sign out/i }).click();
   await expect(page).toHaveURL(/\/sign-in/);
 

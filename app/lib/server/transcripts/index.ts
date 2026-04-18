@@ -5,10 +5,10 @@
 
 export {
   buildTagSortKey,
-  canPatchCuration,
   type CurationPatchInput,
   type CurationPatchValues,
   CurationValidationError,
+  canPatchCuration,
   type DeleteCurationInputs,
   type DeleteCurationResult,
   type DeleteRefusalReason,
@@ -28,41 +28,46 @@ export {
   TAG_SORT_KEY_SEPARATOR,
   validateCurationPatch,
 } from "./curation";
-
+export { CursorDecodeError, type CursorPayload, decodeCursor, encodeCursor } from "./cursor";
+export { type DetailReadInputs, type DetailReadWithRoleResult, readTranscriptDetail, readTranscriptDetailWithRole } from "./detail-read";
+export { DISPLAY_TITLE_FALLBACK, type DisplayTitleSource, deriveDisplayTitle, deriveDisplayTitleFromRow } from "./display-title";
 export {
   AUTOSAVE_DEBOUNCE_MS,
-  autosaveMarkdown,
   type AutosaveInputs,
   type AutosaveResult,
+  autosaveMarkdown,
   EDIT_LOCK_FIELDS,
   type EditLockField,
   type EditSessionContext,
+  type EnterSessionInputs as EnterEditSessionInputs,
   editSessionRefusalToHttpStatus,
   enterEditSession,
-  type EnterSessionInputs as EnterEditSessionInputs,
   exitEditSession,
   generateTabSessionId,
   type MarkdownSavePatch,
   RESUME_RECONNECT_WINDOW_MS,
-  resumeEditSession,
   type ResumeSessionInputs as ResumeEditSessionInputs,
-  sanitizeMarkdownPatch,
+  resumeEditSession,
   SESSION_EXPIRY_MS,
   type SessionRefusalReason,
   SessionRefusedError,
+  sanitizeMarkdownPatch,
 } from "./edit-sessions";
 
-export { CursorDecodeError, type CursorPayload, decodeCursor, encodeCursor } from "./cursor";
-
-export { type DetailReadInputs, type DetailReadWithRoleResult, readTranscriptDetail, readTranscriptDetailWithRole } from "./detail-read";
-
-export { DISPLAY_TITLE_FALLBACK, type DisplayTitleSource, deriveDisplayTitle, deriveDisplayTitleFromRow } from "./display-title";
-
-export { type DetailReadRefusalReason, DetailReadRefusedError, type LibraryReadRefusalReason, LibraryReadRefusedError } from "./errors";
+export {
+  type DetailReadRefusalReason,
+  DetailReadRefusedError,
+  type LibraryReadRefusalReason,
+  LibraryReadRefusedError,
+  type OverviewReadRefusalReason,
+  OverviewReadRefusedError,
+} from "./errors";
 
 export { detailReadRefusalToHttpStatus, libraryReadRefusalToHttpStatus } from "./http-status";
 
 export { type LibraryReadInputs, type LibraryReadResult, readTranscriptLibrary } from "./library-read";
+
+export { OVERVIEW_GROUP_LIMIT, type OverviewReadInputs, type OverviewReadResult, readWorkspaceOverview } from "./overview-read";
 
 export {
   buildSharePath,
@@ -72,7 +77,28 @@ export {
   toDetailView,
   toLibraryItem,
 } from "./projections";
-
+export {
+  ACTIVE_WORK_STATUSES,
+  findTranscriptDetailForWorkspace,
+  listActiveWorkTranscriptsForWorkspace,
+  listLibraryHighlightsForWorkspace,
+  listTranscriptsForWorkspace,
+} from "./queries";
+export {
+  escapeSearchForIlike,
+  LIBRARY_DEFAULT_PAGE_SIZE,
+  LIBRARY_MAX_PAGE_SIZE,
+  LIBRARY_MAX_SEARCH_LENGTH,
+  LIBRARY_MAX_TAG_FILTER_COUNT,
+  LIBRARY_STATUS_FILTER_OPTIONS,
+  type LibraryImportantFilter,
+  type LibraryQueryOptions,
+  LibraryQueryParseError,
+  type LibraryQueryParseFailureReason,
+  type LibraryRawQuery,
+  type LibrarySharedFilter,
+  parseLibraryQueryOptions,
+} from "./query-options";
 export {
   canManagePublicSharing,
   disablePublicSharing,
@@ -89,27 +115,9 @@ export {
   type ShareAuthorizationView,
   type ShareManagementInputs,
   type ShareManagementRefusalReason,
-  shareManagementRefusalToHttpStatus,
   ShareManagementRefusedError,
+  shareManagementRefusalToHttpStatus,
 } from "./sharing";
-
-export { findTranscriptDetailForWorkspace, listTranscriptsForWorkspace } from "./queries";
-
-export {
-  escapeSearchForIlike,
-  LIBRARY_DEFAULT_PAGE_SIZE,
-  LIBRARY_MAX_PAGE_SIZE,
-  LIBRARY_MAX_SEARCH_LENGTH,
-  LIBRARY_MAX_TAG_FILTER_COUNT,
-  LIBRARY_STATUS_FILTER_OPTIONS,
-  type LibraryImportantFilter,
-  type LibraryQueryOptions,
-  LibraryQueryParseError,
-  type LibraryQueryParseFailureReason,
-  type LibraryRawQuery,
-  type LibrarySharedFilter,
-  parseLibraryQueryOptions,
-} from "./query-options";
 
 export {
   DEFAULT_LIBRARY_SORT,

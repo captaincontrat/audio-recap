@@ -30,7 +30,9 @@ test("users can reset their password and sign in with the new credentials", asyn
   await expect(page.getByRole("status")).toContainText(/updated/i);
 
   await signIn(page, email, newPassword);
-  await expect(page).toHaveURL(/\/dashboard/);
+  // After password reset, sign-in still routes through `/dashboard`,
+  // which redirects to the user's default workspace overview.
+  await expect(page).toHaveURL(/\/w\//);
 });
 
 test("password reset link cannot be replayed", async ({ page, request }) => {

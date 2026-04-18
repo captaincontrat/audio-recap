@@ -25,7 +25,7 @@ async function enrollTwoFactor(page: Page, request: APIRequestContext, email: st
   await signUpUser(page, email, password);
   await verifyUser(request, page, email);
   await signIn(page, email, password);
-  await page.waitForURL("**/dashboard");
+  await page.waitForURL(/\/w\//);
 
   await page.goto("/account/security");
   await page.waitForURL("**/account/recent-auth**");
@@ -62,7 +62,7 @@ test("password sign-in redirects to the TOTP challenge and completes on a correc
   await page.getByRole("tab", { name: "Authenticator app" }).click();
   await page.locator("#two-factor-code").fill(generateTotp(secret));
   await page.getByRole("button", { name: "Verify and continue" }).click();
-  await page.waitForURL("**/dashboard");
+  await page.waitForURL(/\/w\//);
 });
 
 test("backup codes let the user recover when the authenticator is unavailable", async ({ page, request }) => {
@@ -86,7 +86,7 @@ test("backup codes let the user recover when the authenticator is unavailable", 
   await page.getByRole("tab", { name: "Backup code" }).click();
   await page.locator("#two-factor-code").fill(firstCode);
   await page.getByRole("button", { name: "Verify and continue" }).click();
-  await page.waitForURL("**/dashboard");
+  await page.waitForURL(/\/w\//);
 });
 
 test("email OTP challenge delivers a code and completes sign-in", async ({ page, request }) => {
@@ -108,7 +108,7 @@ test("email OTP challenge delivers a code and completes sign-in", async ({ page,
 
   await page.locator("#two-factor-code").fill(otpEmail.code);
   await page.getByRole("button", { name: "Verify and continue" }).click();
-  await page.waitForURL("**/dashboard");
+  await page.waitForURL(/\/w\//);
 });
 
 test("trusted devices skip the 2FA challenge on the next sign-in", async ({ page, request, context }) => {
@@ -125,16 +125,16 @@ test("trusted devices skip the 2FA challenge on the next sign-in", async ({ page
   await page.getByLabel("Trust this device for 30 days").check();
   await page.locator("#two-factor-code").fill(generateTotp(secret));
   await page.getByRole("button", { name: "Verify and continue" }).click();
-  await page.waitForURL("**/dashboard");
+  await page.waitForURL(/\/w\//);
 
   await page.getByRole("button", { name: /sign out/i }).click();
   await page.waitForURL("**/sign-in");
 
   // Same browser context — the trust cookie set above is still
-  // attached, so sign-in should land on /dashboard without a 2FA
-  // challenge stop.
+  // attached, so sign-in should land directly on the workspace overview
+  // (via the /dashboard redirect) without a 2FA challenge stop.
   await signIn(page, email, password);
-  await page.waitForURL("**/dashboard");
+  await page.waitForURL(/\/w\//);
 
   // Sanity: a different browser context has no trust cookie, so the
   // challenge should still gate it. We prove this by dropping the
@@ -150,7 +150,7 @@ test("recent-auth expires after the configured window and blocks 2FA management"
   await signUpUser(page, email, password);
   await verifyUser(request, page, email);
   await signIn(page, email, password);
-  await page.waitForURL("**/dashboard");
+  await page.waitForURL(/\/w\//);
 
   // Fresh sign-in stamps `lastAuthenticatedAt`, so the settings page
   // renders immediately — no recent-auth prompt this first time.
@@ -164,7 +164,7 @@ test("recent-auth wrong password surfaces an error without elevating", async ({ 
   await signUpUser(page, email, password);
   await verifyUser(request, page, email);
   await signIn(page, email, password);
-  await page.waitForURL("**/dashboard");
+  await page.waitForURL(/\/w\//);
 
   await page.goto("/account/recent-auth?from=/account/security");
   await page.getByLabel("Password").fill("wrong-password");

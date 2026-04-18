@@ -15,7 +15,7 @@ async function signInFreshUser(page: import("@playwright/test").Page, request: i
   await signUpUser(page, email, password);
   await verifyUser(request, page, email);
   await signIn(page, email, password);
-  await page.waitForURL("**/dashboard");
+  await page.waitForURL(/\/w\//);
   const summary = await fetchWorkspacesForEmail(request, email);
   const personalWorkspace = summary.workspaces.find((w) => w.workspaceType === "personal");
   if (!personalWorkspace) {

@@ -96,8 +96,8 @@ export default async function TranscriptLibraryPage({
   return (
     <main className="mx-auto flex min-h-svh max-w-3xl flex-col gap-6 p-6">
       <header className="flex flex-col gap-2">
-        <Link href="/dashboard" className="text-xs text-muted-foreground hover:underline">
-          ← Back to dashboard
+        <Link href={`/w/${encodeURIComponent(slug)}`} className="text-xs text-muted-foreground hover:underline">
+          ← Workspace overview
         </Link>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h1 className="text-2xl font-semibold">Transcripts</h1>
