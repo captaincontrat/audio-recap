@@ -1,3 +1,5 @@
+import { createHmac } from "node:crypto";
+
 import { type APIRequestContext, expect, type Page } from "@playwright/test";
 
 import type { CapturedEmail } from "@/lib/server/email/memory";
@@ -59,6 +61,52 @@ export async function signIn(page: Page, email: string, password: string): Promi
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Sign in" }).click();
+}
+
+// TOTP generation using Node's crypto for deterministic tests. We
+// intentionally avoid pulling a third-party library here — the
+// Better Auth plugin uses the standard RFC 6238 algorithm with 30-second
+// step and 6 digits, and we can replicate that in ~20 lines.
+export function generateTotp(secretBase32: string, periodSeconds = 30, digits = 6, at: Date = new Date()): string {
+  const key = base32Decode(secretBase32);
+  const counter = Math.floor(at.getTime() / 1000 / periodSeconds);
+  const counterBuffer = Buffer.alloc(8);
+  counterBuffer.writeBigUInt64BE(BigInt(counter));
+  const hmac = createHmac("sha1", key).update(counterBuffer).digest();
+  const offset = hmac[hmac.length - 1]! & 0x0f;
+  const truncated = ((hmac[offset]! & 0x7f) << 24) | ((hmac[offset + 1]! & 0xff) << 16) | ((hmac[offset + 2]! & 0xff) << 8) | (hmac[offset + 3]! & 0xff);
+  return String(truncated % 10 ** digits).padStart(digits, "0");
+}
+
+function base32Decode(input: string): Buffer {
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+  const cleaned = input.replace(/=+$/u, "").toUpperCase();
+  const bytes: number[] = [];
+  let buffer = 0;
+  let bitsLeft = 0;
+  for (const char of cleaned) {
+    const index = alphabet.indexOf(char);
+    if (index < 0) continue;
+    buffer = (buffer << 5) | index;
+    bitsLeft += 5;
+    if (bitsLeft >= 8) {
+      bitsLeft -= 8;
+      bytes.push((buffer >> bitsLeft) & 0xff);
+    }
+  }
+  return Buffer.from(bytes);
+}
+
+// Extracts the `secret` query parameter from the TOTP provisioning URI
+// exposed by the 2FA settings page after `enable`. The URI follows the
+// otpauth:// scheme standard used by every authenticator app.
+export function extractTotpSecret(totpURI: string): string {
+  const parsed = new URL(totpURI);
+  const secret = parsed.searchParams.get("secret");
+  if (!secret) {
+    throw new Error(`Expected secret query param in ${totpURI}`);
+  }
+  return secret;
 }
 
 export type TestWorkspaceEntry = {

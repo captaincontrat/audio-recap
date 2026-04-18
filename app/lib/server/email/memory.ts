@@ -8,7 +8,14 @@ export type CapturedEmail = {
   subject: string;
   text: string;
   type: AuthEmail["type"];
+  // Link-bearing auth emails (verification, password reset, magic link,
+  // workspace invitations) ship a URL that the e2e harness extracts to
+  // exercise the follow-up flow. The two-factor OTP path does not have a
+  // URL — the numeric code is delivered directly instead — so callers
+  // reading `url` must treat it as optional. `code` is populated only for
+  // the OTP path and left empty otherwise.
   url: string;
+  code: string;
   createdAt: string;
 };
 
@@ -35,7 +42,8 @@ export class MemoryEmailAdapter implements EmailAdapter {
       subject: renderSubject(email),
       text: renderPlainText(email),
       type: email.type,
-      url: email.url,
+      url: email.type === "two-factor-otp" ? "" : email.url,
+      code: email.type === "two-factor-otp" ? email.code : "",
       createdAt: new Date().toISOString(),
     };
     entries.push(captured);

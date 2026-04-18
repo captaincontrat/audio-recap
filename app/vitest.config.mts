@@ -48,6 +48,14 @@ export default defineConfig({
         "lib/auth/password-reset.ts",
         "lib/auth/guards.ts",
         "lib/auth/api-response.ts",
+        // Two-factor DB-touching modules. Pure constants in
+        // `two-factor-config.ts` are unit-tested directly; these
+        // modules wire recent-auth / OTP delivery through the
+        // Drizzle client and the email adapter, which are exercised
+        // end-to-end through the Playwright 2FA flows.
+        "lib/auth/recent-auth.ts",
+        "lib/auth/recent-auth-action.ts",
+        "lib/auth/two-factor-email.ts",
         // Workspace modules that touch the Drizzle client. Pure decision
         // logic (eligibility, landing, slug, invariant simulation, resource
         // contract shape, archival state, archival eligibility, archival

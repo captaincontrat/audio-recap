@@ -33,7 +33,20 @@ export type MagicLinkEmail = {
   userName?: string | null;
 };
 
-export type AuthEmail = VerificationEmail | PasswordResetEmail | WorkspaceInvitationEmail | MagicLinkEmail;
+// Sent by the Better Auth `twoFactor` plugin when the user picks "email me a
+// code" as the alternate second factor. `code` is the short numeric OTP the
+// user types back into the challenge form — NOT a link — so the shape is
+// intentionally different from the other auth emails in this union. The
+// plugin generates and persists the code in its own verification store;
+// this adapter is only responsible for delivery.
+export type TwoFactorOtpEmail = {
+  type: "two-factor-otp";
+  to: string;
+  code: string;
+  userName?: string | null;
+};
+
+export type AuthEmail = VerificationEmail | PasswordResetEmail | WorkspaceInvitationEmail | MagicLinkEmail | TwoFactorOtpEmail;
 
 export type SendResult = {
   id: string;
@@ -53,6 +66,8 @@ export function renderSubject(email: AuthEmail): string {
       return `You're invited to join ${email.workspaceName} on Summitdown`;
     case "magic-link":
       return "Your Summitdown sign-in link";
+    case "two-factor-otp":
+      return "Your Summitdown verification code";
   }
 }
 
@@ -110,6 +125,18 @@ export function renderPlainText(email: AuthEmail): string {
         email.url,
         "",
         "If you did not request this link you can ignore this message — your account stays signed out.",
+      ].join("\n");
+    }
+    case "two-factor-otp": {
+      const greeting = email.userName ? `Hi ${email.userName},` : "Hi,";
+      return [
+        greeting,
+        "",
+        "Use this verification code to finish signing in to Summitdown. The code can be used once and expires in a few minutes:",
+        "",
+        email.code,
+        "",
+        "If you did not try to sign in you can ignore this message — your account stays protected by your second factor.",
       ].join("\n");
     }
   }

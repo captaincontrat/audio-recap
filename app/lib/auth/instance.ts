@@ -5,9 +5,9 @@ import { passkey as passkeyPlugin } from "@better-auth/passkey";
 import { type BetterAuthOptions, betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { nextCookies } from "better-auth/next-js";
-import { lastLoginMethod, magicLink, oneTap } from "better-auth/plugins";
+import { lastLoginMethod, magicLink, oneTap, twoFactor } from "better-auth/plugins";
 import { getDb } from "../server/db/client";
-import { account, passkey, session, user, verification } from "../server/db/schema";
+import { account, passkey, session, twoFactor as twoFactorTable, user, verification } from "../server/db/schema";
 import { getServerEnv } from "../server/env";
 import { childLogger } from "../server/logger";
 import { ensurePersonalWorkspace } from "../server/workspaces/personal";
@@ -16,6 +16,8 @@ import { sendMagicLinkEmail } from "./magic-link";
 import { normalizeEmail } from "./normalize";
 import { assertGoogleProfileVerified, assertOAuthCreationVerified } from "./oauth-linking";
 import { hashPassword, MIN_PASSWORD_LENGTH, verifyPassword } from "./password";
+import { TRUST_DEVICE_MAX_AGE_SECONDS, TWO_FACTOR_COOKIE_MAX_AGE_SECONDS, TWO_FACTOR_OTP_PERIOD_MINUTES } from "./two-factor-config";
+import { sendTwoFactorOtpEmail } from "./two-factor-email";
 
 // Seven-day session with a one-day sliding update window. Matches the design
 // decision that sessions are server-owned and rotated on sign-out.
@@ -61,7 +63,7 @@ function buildAuth() {
   return betterAuth({
     database: drizzleAdapter(getDb(), {
       provider: "pg",
-      schema: { user, session, account, verification, passkey },
+      schema: { user, session, account, verification, passkey, twoFactor: twoFactorTable },
     }),
     secret: env.BETTER_AUTH_SECRET,
     baseURL: env.BETTER_AUTH_URL,
@@ -148,6 +150,27 @@ function buildAuth() {
           },
         },
       },
+      session: {
+        // Every time Better Auth creates a fresh session row we are
+        // finishing a real authentication event — password sign-in when
+        // 2FA is off, a magic-link or OAuth callback, or the final step
+        // of a 2FA challenge. Stamping `lastAuthenticatedAt` here gives
+        // the recent-auth gate (see `recent-auth.ts`) a reliable marker
+        // without hooking the sign-in path directly. Passive session
+        // renewal (`updateAge`) goes through `session.update`, which we
+        // intentionally leave alone so the marker tracks real auth,
+        // not request-driven extensions.
+        create: {
+          before: async (sessionData) => {
+            return {
+              data: {
+                ...sessionData,
+                lastAuthenticatedAt: new Date(),
+              },
+            };
+          },
+        },
+      },
     },
     advanced: {
       database: {
@@ -186,6 +209,32 @@ function buildAuth() {
         rpID: env.PASSKEY_RP_ID,
         rpName: env.PASSKEY_RP_NAME,
         origin: env.PASSKEY_ORIGIN ?? env.BETTER_AUTH_URL,
+      }),
+      // Two-factor: opt-in second step wired through Better Auth's plugin.
+      // Enabling it on a user flips `user.twoFactorEnabled` and populates
+      // the `twoFactor` row with a TOTP secret + encrypted backup codes.
+      // On the next sign-in, `signIn` returns `{ twoFactorRedirect: true }`
+      // instead of a session, and the client redirects to the challenge
+      // page (TOTP, email OTP, or backup code). `trustDevice: true` on
+      // that final verify issues a long-lived trust cookie (see
+      // `TRUST_DEVICE_MAX_AGE_SECONDS`) which lets future sign-ins from
+      // the same browser skip the second step.
+      twoFactor({
+        issuer: env.PASSKEY_RP_NAME,
+        skipVerificationOnEnable: false,
+        twoFactorTable: "twoFactor",
+        trustDeviceMaxAge: TRUST_DEVICE_MAX_AGE_SECONDS,
+        twoFactorCookieMaxAge: TWO_FACTOR_COOKIE_MAX_AGE_SECONDS,
+        otpOptions: {
+          sendOTP: async ({ user: otpUser, otp }) => {
+            await sendTwoFactorOtpEmail({
+              to: otpUser.email,
+              code: otp,
+              userName: otpUser.name,
+            });
+          },
+          period: TWO_FACTOR_OTP_PERIOD_MINUTES,
+        },
       }),
       // Uses the default cookie-based hint — the design keeps the hint
       // non-authoritative and purely a UX affordance for the sign-in UI.

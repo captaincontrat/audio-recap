@@ -46,6 +46,20 @@ const anonymousMagicLinkEmail: AuthEmail = {
   userName: null,
 };
 
+const twoFactorOtpEmail: AuthEmail = {
+  type: "two-factor-otp",
+  to: "ada@example.com",
+  code: "123456",
+  userName: "Ada",
+};
+
+const anonymousTwoFactorOtpEmail: AuthEmail = {
+  type: "two-factor-otp",
+  to: "ada@example.com",
+  code: "654321",
+  userName: null,
+};
+
 describe("renderSubject", () => {
   test("uses a verification-specific subject", () => {
     expect(renderSubject(verificationEmail)).toBe("Verify your Summitdown email address");
@@ -61,6 +75,10 @@ describe("renderSubject", () => {
 
   test("uses a magic-link-specific subject", () => {
     expect(renderSubject(magicLinkEmail)).toBe("Your Summitdown sign-in link");
+  });
+
+  test("uses a two-factor-specific subject", () => {
+    expect(renderSubject(twoFactorOtpEmail)).toBe("Your Summitdown verification code");
   });
 });
 
@@ -111,6 +129,25 @@ describe("renderPlainText", () => {
     const body = renderPlainText(magicLinkEmail);
     expect(body).toContain("can be used once");
     expect(body).toContain("your account stays signed out");
+  });
+
+  test("greets the user by name in two-factor OTP emails and includes the numeric code", () => {
+    const body = renderPlainText(twoFactorOtpEmail);
+    expect(body.startsWith("Hi Ada,")).toBe(true);
+    expect(body).toContain("123456");
+    expect(body).toContain("Use this verification code to finish signing in to Summitdown");
+  });
+
+  test("falls back to an anonymous greeting for two-factor OTP emails when the user is unknown", () => {
+    const body = renderPlainText(anonymousTwoFactorOtpEmail);
+    expect(body.startsWith("Hi,")).toBe(true);
+    expect(body).toContain("654321");
+  });
+
+  test("reminds the reader that the code is single-use and the account stays protected on no-op", () => {
+    const body = renderPlainText(twoFactorOtpEmail);
+    expect(body).toContain("can be used once");
+    expect(body).toContain("your account stays protected by your second factor");
   });
 });
 

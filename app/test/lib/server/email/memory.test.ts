@@ -66,4 +66,37 @@ describe("MemoryEmailAdapter", () => {
     const emails = getCapturedEmails("user@example.com");
     expect(emails.map((email) => email.url)).toEqual(["https://1", "https://2"]);
   });
+
+  test("captures two-factor OTP emails with the code populated and url empty", async () => {
+    const adapter = new MemoryEmailAdapter();
+    await adapter.send({
+      type: "two-factor-otp",
+      to: "user@example.com",
+      code: "123456",
+      userName: "Ada",
+    });
+
+    const emails = getCapturedEmails("user@example.com");
+    expect(emails).toHaveLength(1);
+    const [email] = emails;
+    expect(email?.type).toBe("two-factor-otp");
+    expect(email?.subject).toContain("verification code");
+    expect(email?.url).toBe("");
+    expect(email?.code).toBe("123456");
+    expect(email?.text).toContain("123456");
+  });
+
+  test("leaves code empty for link-bearing email types", async () => {
+    const adapter = new MemoryEmailAdapter();
+    await adapter.send({
+      type: "magic-link",
+      to: "user@example.com",
+      url: "https://app.example.com/api/auth/magic-link/verify?token=abc",
+      userName: null,
+    });
+
+    const [email] = getCapturedEmails("user@example.com");
+    expect(email?.code).toBe("");
+    expect(email?.url).toContain("magic-link/verify");
+  });
 });

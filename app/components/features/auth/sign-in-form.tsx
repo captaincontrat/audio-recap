@@ -10,10 +10,22 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { type SignInInput, signInInputSchema } from "@/lib/auth/schemas";
 
-type SignInApiResponse = { ok: true; userId: string; emailVerified: boolean } | { ok: false; code: string; message: string };
+type SignInApiResponse =
+  | { ok: true; userId: string; emailVerified: boolean }
+  | { ok: true; twoFactorRequired: true; twoFactorMethods: string[] }
+  | { ok: false; code: string; message: string };
 
 function isSafeRedirect(target: string | undefined): target is string {
   return typeof target === "string" && target.startsWith("/") && !target.startsWith("//");
+}
+
+function buildTwoFactorUrl(from: string | undefined): string {
+  const base = "/two-factor";
+  if (isSafeRedirect(from)) {
+    const params = new URLSearchParams({ from });
+    return `${base}?${params.toString()}`;
+  }
+  return base;
 }
 
 export function SignInForm({ redirectPromise }: { redirectPromise: Promise<{ from?: string }> }) {
@@ -43,6 +55,11 @@ export function SignInForm({ redirectPromise }: { redirectPromise: Promise<{ fro
     }
     if (!payload.ok) {
       setServerError(payload.message);
+      return;
+    }
+    if ("twoFactorRequired" in payload) {
+      router.push(buildTwoFactorUrl(from));
+      router.refresh();
       return;
     }
     const destination = payload.emailVerified ? (isSafeRedirect(from) ? from : "/dashboard") : "/verify-email";

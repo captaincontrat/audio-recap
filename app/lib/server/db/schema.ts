@@ -20,6 +20,12 @@ export const user = pgTable(
     email: text("email").notNull(),
     emailVerified: boolean("email_verified").notNull().default(false),
     image: text("image"),
+    // Opt-in second-factor flag managed by `add-account-security-hardening`.
+    // Set to `true` when the user successfully completes TOTP enrollment and
+    // flipped back to `false` on disable. The flag gates the Better Auth
+    // `twoFactor` plugin's sign-in interception hook: when `false`, primary
+    // sign-in completes as before and no challenge is issued.
+    twoFactorEnabled: boolean("two_factor_enabled").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
   },
@@ -35,6 +41,16 @@ export const session = pgTable("session", {
   expiresAt: timestamp("expires_at", { withTimezone: true, mode: "date" }).notNull(),
   ipAddress: text("ip_address"),
   userAgent: text("user_agent"),
+  // Recent-auth marker owned by `add-account-security-hardening`. Stamped
+  // the moment the current session reaches a fully-authenticated state
+  // (primary sign-in for password-only accounts, primary sign-in plus
+  // second-factor verification for 2FA accounts, or a re-auth prompt for
+  // sensitive auth-management actions). Security-sensitive auth-management
+  // actions compare `now() - last_authenticated_at` against the
+  // recent-auth window and fall back to the re-auth flow when the marker
+  // is null or stale. Null means "never completed a recent-auth check on
+  // this session" and forces a prompt.
+  lastAuthenticatedAt: timestamp("last_authenticated_at", { withTimezone: true, mode: "date" }),
   createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
 });
@@ -107,6 +123,38 @@ export const passkey = pgTable(
     aaguid: text("aaguid"),
   },
   (table) => [index("passkey_user_idx").on(table.userId), index("passkey_credential_idx").on(table.credentialID)],
+);
+
+// Two-factor enrollment table owned by the Better Auth `twoFactor` plugin
+// (see https://better-auth.com/docs/plugins/2fa). Column names and types
+// follow the plugin's adapter schema so the built-in `/two-factor/*`
+// endpoints resolve through the Drizzle adapter without custom mapping.
+//
+// The plugin stores a single row per enrolled user. `secret` is the TOTP
+// shared secret (never returned to the client after enrollment),
+// `backup_codes` is the encoded single-use recovery bundle, and
+// `verified` flips to `true` after the user proves possession of the
+// authenticator during enrollment. The trust-device and challenge
+// ceremonies themselves are cookie-based and intentionally have no
+// persistent tables here — trusted devices live in signed cookies so
+// they follow the browser rather than a database row.
+export const twoFactor = pgTable(
+  "two_factor",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    secret: text("secret").notNull(),
+    backupCodes: text("backup_codes").notNull(),
+    // `verified` flips from `false` to `true` the first time the user
+    // successfully submits a TOTP code during the enrollment ceremony.
+    // The plugin's sign-in hook refuses to challenge rows that are still
+    // in the pending (unverified) state, which is what keeps the
+    // "enrolled but not yet verified" window from locking anyone out.
+    verified: boolean("verified").notNull().default(false),
+  },
+  (table) => [index("two_factor_user_idx").on(table.userId), index("two_factor_secret_idx").on(table.secret)],
 );
 
 // Application-owned token tables. The hashed material lives here, never in
@@ -506,6 +554,8 @@ export type AccountRow = typeof account.$inferSelect;
 export type VerificationRow = typeof verification.$inferSelect;
 export type PasskeyRow = typeof passkey.$inferSelect;
 export type InsertPasskeyRow = typeof passkey.$inferInsert;
+export type TwoFactorRow = typeof twoFactor.$inferSelect;
+export type InsertTwoFactorRow = typeof twoFactor.$inferInsert;
 export type EmailVerificationTokenRow = typeof emailVerificationToken.$inferSelect;
 export type PasswordResetTokenRow = typeof passwordResetToken.$inferSelect;
 export type WorkspaceRow = typeof workspace.$inferSelect;

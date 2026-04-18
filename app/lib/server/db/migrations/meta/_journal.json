@@ -64,6 +64,13 @@
       "when": 1776479384777,
       "tag": "0008_add_federated_and_passwordless_auth",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1776481808353,
+      "tag": "0009_add_account_security_hardening",
+      "breakpoints": true
     }
   ]
 }

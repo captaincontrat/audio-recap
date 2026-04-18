@@ -12,6 +12,12 @@ export type SignInSuccess = {
   emailVerified: boolean;
 };
 
+export type SignInTwoFactorRequired = {
+  ok: true;
+  twoFactorRequired: true;
+  twoFactorMethods: readonly string[];
+};
+
 // Generic message required by the spec: never reveal whether the failure was
 // a missing account vs an incorrect password.
 const GENERIC_AUTH_FAILURE = "Email or password is incorrect.";
@@ -22,7 +28,7 @@ export type SignInFailure = {
   message: string;
 };
 
-export type SignInResult = SignInSuccess | SignInFailure;
+export type SignInResult = SignInSuccess | SignInTwoFactorRequired | SignInFailure;
 
 export async function signInWithPassword(input: { email: string; password: string }): Promise<SignInResult> {
   const log = childLogger({ component: "auth.sign-in" });
@@ -45,6 +51,23 @@ export async function signInWithPassword(input: { email: string; password: strin
       body: { email, password },
       returnHeaders: false,
     });
+    // Better Auth's `twoFactor` plugin intercepts the sign-in response
+    // when the user has 2FA enabled: no session token is issued and a
+    // short-lived 2FA cookie is set instead. The client must redirect
+    // to the challenge page. We collapse both TOTP and email-OTP cases
+    // into a single `twoFactorRequired: true` signal — the challenge
+    // UI inspects `twoFactorMethods` to decide which entry point to
+    // render first.
+    const twoFactorRedirect = (outcome as { twoFactorRedirect?: boolean } | undefined)?.twoFactorRedirect;
+    if (twoFactorRedirect) {
+      const methods = (outcome as { twoFactorMethods?: string[] } | undefined)?.twoFactorMethods ?? [];
+      return {
+        ok: true,
+        twoFactorRequired: true,
+        twoFactorMethods: methods,
+      };
+    }
+
     const userId = outcome?.user?.id;
     const sessionToken = outcome?.token;
     if (!userId || !sessionToken) {

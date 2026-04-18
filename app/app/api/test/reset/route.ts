@@ -9,6 +9,7 @@ import { getServerEnv } from "@/lib/server/env";
 const TABLES = [
   "password_reset_token",
   "email_verification_token",
+  "two_factor",
   "session",
   "account",
   "verification",

@@ -12,7 +12,7 @@ import { SESSION_COOKIE_NAME } from "@/lib/auth/cookies";
 
 const SIGN_IN_PATH = "/sign-in";
 
-const PROTECTED_PREFIXES = ["/dashboard", "/settings", "/meetings"];
+const PROTECTED_PREFIXES = ["/dashboard", "/settings", "/meetings", "/account"];
 
 function isProtected(pathname: string): boolean {
   return PROTECTED_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));

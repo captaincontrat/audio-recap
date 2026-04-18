@@ -18,5 +18,13 @@ export async function POST(request: Request) {
     return jsonResponse({ ok: false, code: outcome.code, message: outcome.message }, { status: 401 });
   }
 
+  if ("twoFactorRequired" in outcome) {
+    return jsonResponse({
+      ok: true,
+      twoFactorRequired: true,
+      twoFactorMethods: outcome.twoFactorMethods,
+    });
+  }
+
   return jsonResponse({ ok: true, userId: outcome.userId, emailVerified: outcome.emailVerified });
 }
