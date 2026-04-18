@@ -22,7 +22,18 @@ export type WorkspaceInvitationEmail = {
   inviterName?: string | null;
 };
 
-export type AuthEmail = VerificationEmail | PasswordResetEmail | WorkspaceInvitationEmail;
+// Sent by the Better Auth magic-link plugin. `url` contains the single-use
+// verification token; the plugin stores it in the `verification` table and
+// consumes it on callback. `userName` is optional because magic-link sign-in
+// also applies to brand-new accounts whose profile we haven't met yet.
+export type MagicLinkEmail = {
+  type: "magic-link";
+  to: string;
+  url: string;
+  userName?: string | null;
+};
+
+export type AuthEmail = VerificationEmail | PasswordResetEmail | WorkspaceInvitationEmail | MagicLinkEmail;
 
 export type SendResult = {
   id: string;
@@ -40,6 +51,8 @@ export function renderSubject(email: AuthEmail): string {
       return "Reset your Summitdown password";
     case "workspace-invitation":
       return `You're invited to join ${email.workspaceName} on Summitdown`;
+    case "magic-link":
+      return "Your Summitdown sign-in link";
   }
 }
 
@@ -85,6 +98,18 @@ export function renderPlainText(email: AuthEmail): string {
         email.url,
         "",
         "If you were not expecting this invitation you can ignore this message.",
+      ].join("\n");
+    }
+    case "magic-link": {
+      const greeting = email.userName ? `Hi ${email.userName},` : "Hi,";
+      return [
+        greeting,
+        "",
+        "Use the link below to sign in to Summitdown. The link can be used once and expires soon:",
+        "",
+        email.url,
+        "",
+        "If you did not request this link you can ignore this message — your account stays signed out.",
       ].join("\n");
     }
   }

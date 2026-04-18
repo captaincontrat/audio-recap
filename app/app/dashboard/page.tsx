@@ -1,6 +1,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
+import { PasskeyManager } from "@/components/features/auth/passkey-manager";
 import { SignOutButton } from "@/components/features/auth/sign-out-button";
 import { evaluateProtectedRoute } from "@/lib/auth/guards";
 
@@ -38,6 +39,7 @@ export default async function DashboardPage() {
           <SignOutButton />
         </div>
       </section>
+      <PasskeyManager />
     </main>
   );
 }

@@ -61,9 +61,12 @@ export const account = pgTable(
   (table) => [uniqueIndex("account_provider_account_unique").on(table.providerId, table.accountId)],
 );
 
-// Better Auth internal verification table. Kept for adapter compatibility even
-// though the reduced bootstrap doesn't rely on Better Auth's built-in flow for
-// email verification or password reset. Later changes may reuse it.
+// Better Auth internal verification table. The reduced bootstrap's email
+// verification and password reset flows use the application-owned token
+// tables below. The Better Auth `magic-link` plugin (added by
+// `add-federated-and-passwordless-auth`) stores hashed magic-link tokens
+// here via `createVerificationValue`, so the uniqueness of the table name
+// doubles as the magic-link token store.
 export const verification = pgTable("verification", {
   id: text("id").primaryKey(),
   identifier: text("identifier").notNull(),
@@ -72,6 +75,39 @@ export const verification = pgTable("verification", {
   createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true, mode: "date" }).notNull().defaultNow(),
 });
+
+// Passkey enrollment table owned by the Better Auth `passkey` plugin (see
+// `@better-auth/passkey`). Column names and types match the plugin's adapter
+// schema so existing endpoints (`/passkey/*`) resolve through the Drizzle
+// adapter without custom mapping.
+//
+// Passkeys are additive to an existing account: every row points at a
+// `user.id`, enrollment requires an authenticated session, and the
+// `credential_id` column is indexed so sign-in lookups stay fast regardless
+// of how many passkeys the user has enrolled.
+export const passkey = pgTable(
+  "passkey",
+  {
+    id: text("id").primaryKey(),
+    name: text("name"),
+    publicKey: text("public_key").notNull(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    // Property is spelled `credentialID` (not `credentialId`) to match the
+    // field name the Better Auth `passkey` plugin schema uses when looking
+    // rows up through the Drizzle adapter. The underlying column name stays
+    // in snake_case (`credential_id`).
+    credentialID: text("credential_id").notNull(),
+    counter: integer("counter").notNull(),
+    deviceType: text("device_type").notNull(),
+    backedUp: boolean("backed_up").notNull(),
+    transports: text("transports"),
+    createdAt: timestamp("created_at", { withTimezone: true, mode: "date" }).defaultNow(),
+    aaguid: text("aaguid"),
+  },
+  (table) => [index("passkey_user_idx").on(table.userId), index("passkey_credential_idx").on(table.credentialID)],
+);
 
 // Application-owned token tables. The hashed material lives here, never in
 // plaintext, so the reduced-bootstrap design constraint "stored only as
@@ -468,6 +504,8 @@ export type InsertUserRow = typeof user.$inferInsert;
 export type SessionRow = typeof session.$inferSelect;
 export type AccountRow = typeof account.$inferSelect;
 export type VerificationRow = typeof verification.$inferSelect;
+export type PasskeyRow = typeof passkey.$inferSelect;
+export type InsertPasskeyRow = typeof passkey.$inferInsert;
 export type EmailVerificationTokenRow = typeof emailVerificationToken.$inferSelect;
 export type PasswordResetTokenRow = typeof passwordResetToken.$inferSelect;
 export type WorkspaceRow = typeof workspace.$inferSelect;

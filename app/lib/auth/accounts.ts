@@ -2,9 +2,29 @@ import "server-only";
 
 import { and, eq, ne } from "drizzle-orm";
 import { getDb } from "../server/db/client";
-import { account, session, user } from "../server/db/schema";
+import { account, passkey, session, user } from "../server/db/schema";
 import { normalizeEmail, normalizeEmailOrThrow } from "./normalize";
 import { hashPassword } from "./password";
+
+// Provider identifiers used by Better Auth and its plugins. Centralizing
+// them here keeps the account repository the single source of truth for
+// what a "linked credential" can look like.
+export const CREDENTIAL_PROVIDER_ID = "credential" as const;
+export const GOOGLE_PROVIDER_ID = "google" as const;
+
+export type LinkedCredentialSummary = {
+  providerId: string;
+  accountId: string;
+  createdAt: Date;
+};
+
+export type EnrolledPasskeySummary = {
+  id: string;
+  name: string | null;
+  deviceType: string;
+  backedUp: boolean;
+  createdAt: Date | null;
+};
 
 export type AccountUser = {
   id: string;
@@ -102,4 +122,58 @@ export async function revokeSessionsForUser(options: SessionRevocationOptions): 
 // the normalized email when valid, otherwise throws.
 export function normalizeUserEmailOrThrow(email: string): string {
   return normalizeEmailOrThrow(email);
+}
+
+// List every Better Auth account row linked to a user (password, Google,
+// and any future OAuth provider). Used by the account-settings UI to show
+// "connected methods" and by the passkey-enrollment flow when it needs to
+// know whether a user already has a primary credential.
+export async function listLinkedAccountsForUser(userId: string): Promise<LinkedCredentialSummary[]> {
+  const rows = await getDb()
+    .select({
+      providerId: account.providerId,
+      accountId: account.accountId,
+      createdAt: account.createdAt,
+    })
+    .from(account)
+    .where(eq(account.userId, userId));
+
+  return rows.map((row) => ({
+    providerId: row.providerId,
+    accountId: row.accountId,
+    createdAt: row.createdAt,
+  }));
+}
+
+// Passkeys live in their own table rather than under `account`; this helper
+// surfaces the metadata the enrollment UI needs (name, device type, backup
+// status, created-at) without leaking the stored public key.
+export async function listEnrolledPasskeysForUser(userId: string): Promise<EnrolledPasskeySummary[]> {
+  const rows = await getDb()
+    .select({
+      id: passkey.id,
+      name: passkey.name,
+      deviceType: passkey.deviceType,
+      backedUp: passkey.backedUp,
+      createdAt: passkey.createdAt,
+    })
+    .from(passkey)
+    .where(eq(passkey.userId, userId));
+
+  return rows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    deviceType: row.deviceType,
+    backedUp: row.backedUp,
+    createdAt: row.createdAt,
+  }));
+}
+
+// Look up an existing user by the normalized form of the supplied email,
+// used by the Google and magic-link linking paths as a safety net before
+// they hand the account resolution back to Better Auth. Encapsulating the
+// normalization here keeps the "one account per normalized email" rule in
+// lockstep with the unique index on `user.email`.
+export async function findUserByNormalizedEmail(email: string): Promise<AccountUser | null> {
+  return findUserByEmail(email);
 }

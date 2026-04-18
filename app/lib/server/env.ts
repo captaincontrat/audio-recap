@@ -8,6 +8,20 @@ const serverEnvSchema = z.object({
   BETTER_AUTH_SECRET: z.string().min(32, "BETTER_AUTH_SECRET must be at least 32 characters"),
   BETTER_AUTH_URL: z.string().url().default("http://localhost:3000"),
 
+  // Google OAuth / One Tap credentials. Both are optional so the app boots
+  // without them in local dev; federated sign-in is enabled at runtime only
+  // when both values are present.
+  GOOGLE_CLIENT_ID: z.string().optional(),
+  GOOGLE_CLIENT_SECRET: z.string().optional(),
+
+  // Passkey relying-party identifier and origin. Defaults target local dev;
+  // production deployments set these to the canonical host. `PASSKEY_RP_ID`
+  // must be the eTLD+1 of the site, and `PASSKEY_ORIGIN` the full URL of
+  // the page hosting the WebAuthn ceremony.
+  PASSKEY_RP_ID: z.string().default("localhost"),
+  PASSKEY_RP_NAME: z.string().default("Summitdown"),
+  PASSKEY_ORIGIN: z.string().url().optional(),
+
   DATABASE_URL: z.string().url(),
 
   REDIS_URL: z.string().url(),
