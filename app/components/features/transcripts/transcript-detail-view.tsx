@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 
 import { TranscriptCurationPanel } from "@/components/features/transcripts/transcript-curation-panel";
+import { TranscriptExportPanel } from "@/components/features/transcripts/transcript-export-panel";
 import { TranscriptSharePanel, type ShareUpdate } from "@/components/features/transcripts/transcript-share-panel";
 import { Button } from "@/components/ui/button";
 import { useEditSession } from "@/lib/client/edit-sessions";
@@ -161,6 +162,13 @@ export function TranscriptDetailView({ workspaceSlug, transcriptId, initial, can
           canManageSharing={sharing.canManageSharing}
           status={state.status}
           onShareApplied={applyShareUpdate(setState)}
+        />
+        <TranscriptExportPanel
+          displayTitle={state.displayTitle}
+          recapMarkdown={state.recapMarkdown}
+          transcriptMarkdown={state.transcriptMarkdown}
+          canExport={state.status === "completed"}
+          exportDisabledReason={state.status === "completed" ? null : exportDisabledReasonFor(state.status)}
         />
         <div className="flex flex-wrap items-center gap-2">
           <Button type="button" size="sm" variant="outline" onClick={refresh} disabled={fetchState.kind === "refreshing" || isEditing}>
@@ -464,6 +472,33 @@ function statusTone(status: DetailView["status"]): string {
       return "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300";
     default:
       return "border-border/70 bg-muted text-muted-foreground";
+  }
+}
+
+// Copy used by the export panel when the transcript is not yet in
+// `completed` status. Export is a read action over the canonical
+// markdown, so it only becomes available after processing finishes —
+// this mirrors the spec's completed-only rule. Failed transcripts get
+// a distinct message because the markdown is intentionally empty and
+// a download would have nothing to show.
+function exportDisabledReasonFor(status: DetailView["status"]): string {
+  switch (status) {
+    case "completed":
+      return "";
+    case "failed":
+      return "Downloads are disabled for transcripts that failed processing.";
+    case "queued":
+    case "preprocessing":
+    case "transcribing":
+    case "generating_recap":
+    case "generating_title":
+    case "finalizing":
+    case "retrying":
+      return "Downloads become available once this transcript finishes processing.";
+    default: {
+      const exhaustive: never = status;
+      throw new Error(`Unhandled transcript status: ${String(exhaustive)}`);
+    }
   }
 }
 
