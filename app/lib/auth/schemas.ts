@@ -1,11 +1,16 @@
 import { z } from "zod";
 
-import { MIN_PASSWORD_LENGTH } from "./password";
+import { MIN_PASSWORD_LENGTH } from "./password-policy";
 
 // Shared schemas used by both server-side services (authoritative validation)
 // and `react-hook-form` + `@hookform/resolvers/zod` on the browser for
 // immediate UX feedback. Keeping them in one module prevents the client and
 // server from drifting out of sync.
+//
+// This file is intentionally client-safe: it must only import from other
+// client-safe modules (e.g. `password-policy`). Importing from `password.ts`
+// (`server-only`) would drag `@node-rs/argon2` into the client bundle, whose
+// browser fallback has no exports and breaks Turbopack.
 
 export const emailSchema = z.string().trim().min(1, "Email is required").email("Enter a valid email address");
 

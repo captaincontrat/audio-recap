@@ -1,14 +1,13 @@
-import { childLogger } from "@/lib/server/logger";
-import { registerWorkspaceArchiveSideEffects } from "@/lib/server/workspaces/bootstrap";
-
-// Next.js runs this module once per server boot in both the node and
-// edge runtimes. We gate the workspace-capability registration on the
-// node runtime because every downstream side effect touches the
-// Postgres client, which only works under node.
+// Next.js invokes `register` once per server boot in both the Node
+// and Edge runtimes. The node-only work (logger, workspace bootstrap,
+// anything that touches `node:crypto` or Postgres) lives in a
+// dedicated `instrumentation-node.ts` file so the Edge bundler never
+// walks that import graph. The `NEXT_RUNTIME === "nodejs"` check is a
+// compile-time constant, which lets Next.js / Turbopack strip the
+// dynamic import from the Edge bundle entirely.
+// See: https://nextjs.org/docs/app/guides/instrumentation#importing-runtime-specific-code
 export async function register(): Promise<void> {
-  if (process.env.NEXT_RUNTIME !== "nodejs") {
-    return;
+  if (process.env.NEXT_RUNTIME === "nodejs") {
+    await import("./instrumentation-node");
   }
-  registerWorkspaceArchiveSideEffects();
-  childLogger({ component: "instrumentation" }).debug("workspace archive side effects registered");
 }

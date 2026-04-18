@@ -1,4 +1,8 @@
+import "server-only";
+
 import { hash, verify } from "@node-rs/argon2";
+
+import { MIN_PASSWORD_LENGTH } from "./password-policy";
 
 // OWASP "second recommended option" for Argon2id as of 2025:
 // memoryCost 19 MiB, timeCost 2, parallelism 1. Values are expressed in the
@@ -17,7 +21,10 @@ const ARGON2ID_OPTIONS = {
   outputLen: 32,
 } as const;
 
-export const MIN_PASSWORD_LENGTH = 12;
+// Re-exported so existing server-side callers (`instance.ts`, tests, etc.)
+// that already import from this module keep working. Clients must import
+// from `./password-policy` directly since this file is `server-only`.
+export { MIN_PASSWORD_LENGTH };
 
 export class PasswordTooShortError extends Error {
   readonly code = "password_too_short" as const;

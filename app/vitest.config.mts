@@ -155,6 +155,7 @@ export default defineConfig({
         "lib/client/edit-sessions/use-edit-session.ts",
         "lib/client/edit-sessions/index.ts",
         "instrumentation.ts",
+        "instrumentation-node.ts",
         // Next.js pages and route handlers are covered by Playwright
         // end-to-end tests. They are thin view layers that wire imported
         // services to routes/forms; unit coverage would mostly mirror the
