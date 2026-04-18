@@ -47,25 +47,33 @@ module AgentPlanner
     def process_change(change)
       AgentPlanner.emit_log("[#{change}] starting apply/sync/archive/commit workflow")
 
-      session_id = AgentPlanner.start_session(
+      AgentPlanner.start_session(
         "/openspec-apply-change #{change}",
         label: "#{change} apply"
       )
 
+      session_id = AgentPlanner.start_session(
+        "/openspec-verify-change #{change}",
+        label: "#{change} verify"
+      )
+
       AgentPlanner.ask_session(
         session_id,
+        "Immediately perform the necessary actions to fix the identified issues, or say there is no issue to fix.",
+        label: "#{change} fix"
+      )
+
+      AgentPlanner.start_session(
         make_sync_prompt(change),
         label: "#{change} sync"
       )
 
-      AgentPlanner.ask_session(
-        session_id,
+      AgentPlanner.start_session(
         "/openspec-archive-change #{change}",
         label: "#{change} archive"
       )
 
-      AgentPlanner.ask_session(
-        session_id,
+      AgentPlanner.start_session(
         make_commit_and_push_prompt(change),
         label: "#{change} commit-push"
       )
