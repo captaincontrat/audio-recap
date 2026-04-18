@@ -6,11 +6,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { authClient } from "@/lib/auth/client";
+import { useTranslator } from "@/lib/i18n/provider";
 
 // Request-a-link form. The server endpoint returns `{ status: true }`
 // regardless of whether the email exists, so we always show the same
 // "check your inbox" confirmation to avoid leaking account existence.
 export function MagicLinkForm({ callbackURL = "/dashboard" }: { callbackURL?: string }) {
+  const translate = useTranslator();
   const [email, setEmail] = useState("");
   const [isPending, setIsPending] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -27,7 +29,7 @@ export function MagicLinkForm({ callbackURL = "/dashboard" }: { callbackURL?: st
     // dispatch AND a "no such email" path both land on the same confirmation
     // to keep existence ambiguous.
     if (apiError && apiError.status === 429) {
-      setError("Too many requests. Please wait a moment and try again.");
+      setError(translate("auth.magicLink.rateLimited"));
       return;
     }
     setSubmitted(true);
@@ -36,7 +38,7 @@ export function MagicLinkForm({ callbackURL = "/dashboard" }: { callbackURL?: st
   if (submitted) {
     return (
       <div className="rounded-md border border-border bg-muted/40 p-3 text-xs" role="status" aria-live="polite">
-        If an account with that email exists, we've sent a sign-in link. It will expire in a few minutes and can only be used once.
+        {translate("auth.magicLink.confirmation")}
       </div>
     );
   }
@@ -44,7 +46,7 @@ export function MagicLinkForm({ callbackURL = "/dashboard" }: { callbackURL?: st
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-3" noValidate>
       <div className="flex flex-col gap-1.5">
-        <Label htmlFor="magic-link-email">Email</Label>
+        <Label htmlFor="magic-link-email">{translate("common.email.label")}</Label>
         <Input id="magic-link-email" type="email" autoComplete="email" required value={email} onChange={(event) => setEmail(event.target.value)} />
       </div>
       {error ? (
@@ -53,7 +55,7 @@ export function MagicLinkForm({ callbackURL = "/dashboard" }: { callbackURL?: st
         </p>
       ) : null}
       <Button type="submit" variant="outline" disabled={isPending || !email.trim()}>
-        {isPending ? "Sending link…" : "Email me a sign-in link"}
+        {isPending ? translate("auth.magicLink.submit.loading") : translate("auth.magicLink.submit")}
       </Button>
     </form>
   );

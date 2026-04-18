@@ -5,47 +5,53 @@ import { LastLoginMethodHint } from "@/components/features/auth/last-login-metho
 import { MagicLinkForm } from "@/components/features/auth/magic-link-form";
 import { PasskeySignInButton } from "@/components/features/auth/passkey-sign-in-button";
 import { SignInForm } from "@/components/features/auth/sign-in-form";
+import { getServerTranslator } from "@/lib/i18n/server";
 
-export const metadata = {
-  title: "Sign in",
-};
+// Metadata is resolved per-request via `generateMetadata` so the document
+// title reflects the user's active locale rather than a hard-coded English
+// string.
+export async function generateMetadata() {
+  const { translate } = await getServerTranslator();
+  return { title: translate("auth.signIn.title") };
+}
 
 // Federated options only render when Google OAuth credentials are exposed
 // to the browser. Deployments without credentials still see password,
 // magic-link, and passkey sign-in paths.
 const HAS_GOOGLE = Boolean(process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID);
 
-export default function SignInPage({ searchParams }: { searchParams: Promise<{ from?: string }> }) {
+export default async function SignInPage({ searchParams }: { searchParams: Promise<{ from?: string }> }) {
+  const { translate } = await getServerTranslator();
   return (
     <main className="mx-auto flex min-h-svh max-w-md flex-col justify-center gap-6 p-6">
       <header className="flex flex-col gap-2">
-        <h1 className="text-2xl font-semibold">Welcome back</h1>
-        <p className="text-sm text-muted-foreground">Sign in to your Summitdown account.</p>
+        <h1 className="text-2xl font-semibold">{translate("auth.signIn.heading")}</h1>
+        <p className="text-sm text-muted-foreground">{translate("auth.signIn.subtitle")}</p>
       </header>
 
       <LastLoginMethodHint />
 
       <SignInForm redirectPromise={searchParams} />
 
-      <Divider>or</Divider>
+      <Divider>{translate("auth.signIn.divider.or")}</Divider>
 
       <div className="flex flex-col gap-3">
         {HAS_GOOGLE ? <GoogleSignInButton /> : null}
         <PasskeySignInButton />
       </div>
 
-      <Divider>or sign in with an email link</Divider>
+      <Divider>{translate("auth.signIn.divider.emailLink")}</Divider>
 
       <MagicLinkForm />
 
       <div className="flex flex-col gap-2 text-sm text-muted-foreground">
         <Link href="/forgot-password" className="underline underline-offset-4">
-          Forgot your password?
+          {translate("auth.signIn.forgotPassword")}
         </Link>
         <p>
-          New here?{" "}
+          {translate("auth.signIn.signUpPrompt")}{" "}
           <Link href="/sign-up" className="font-medium text-foreground underline underline-offset-4">
-            Create an account
+            {translate("auth.signIn.signUpCta")}
           </Link>
         </p>
       </div>

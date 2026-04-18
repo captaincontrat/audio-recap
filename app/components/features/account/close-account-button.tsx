@@ -4,6 +4,8 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { useTranslator } from "@/lib/i18n/provider";
+import type { Translator } from "@/lib/i18n/translator";
 
 type ApiSuccess = { ok: true; scheduledDeleteAt: string };
 type ApiFailure = {
@@ -25,12 +27,13 @@ type ApiResponse = ApiSuccess | ApiFailure;
 // success the user lands on `/account/closed` where they can still
 // self-service reactivate during the 30-day window.
 export function CloseAccountButton() {
+  const translate = useTranslator();
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function onClick() {
-    const confirmed = window.confirm("Close your account? You will be signed out immediately and you have 30 days to reactivate before permanent deletion.");
+    const confirmed = window.confirm(translate("chrome.closeButton.confirm"));
     if (!confirmed) return;
 
     setSubmitting(true);
@@ -39,11 +42,11 @@ export function CloseAccountButton() {
       const response = await fetch("/api/account/close", { method: "POST", headers: { "content-type": "application/json" } });
       const payload = (await response.json().catch(() => null)) as ApiResponse | null;
       if (!payload) {
-        setError("Unexpected response from the server.");
+        setError(translate("common.form.unexpectedServerResponse"));
         return;
       }
       if (!payload.ok) {
-        setError(describeFailure(payload));
+        setError(describeFailure(payload, translate));
         return;
       }
       router.push("/account/closed");
@@ -56,7 +59,7 @@ export function CloseAccountButton() {
   return (
     <div className="flex flex-col gap-2">
       <Button type="button" variant="destructive" onClick={onClick} disabled={submitting}>
-        {submitting ? "Closing…" : "Close my account"}
+        {submitting ? translate("chrome.closeButton.submit.loading") : translate("chrome.closeButton.submit")}
       </Button>
       {error ? (
         <p role="alert" className="text-sm text-destructive">
@@ -67,23 +70,23 @@ export function CloseAccountButton() {
   );
 }
 
-function describeFailure(payload: ApiFailure): string {
+function describeFailure(payload: ApiFailure, translate: Translator): string {
   switch (payload.code) {
     case "unauthenticated":
-      return "Your session has expired. Sign in again to continue.";
+      return translate("chrome.closeButton.error.unauthenticated");
     case "account_not_found":
-      return "We could not find your account.";
+      return translate("chrome.closeButton.error.accountNotFound");
     case "already_closed":
-      return "This account is already closed.";
+      return translate("chrome.closeButton.error.alreadyClosed");
     case "recent_auth_required":
-      return "Re-enter your password to continue.";
+      return translate("chrome.closeButton.error.recentAuthRequired");
     case "fresh_two_factor_required":
-      return "Sign in again with your authenticator before closing.";
+      return translate("chrome.closeButton.error.freshTwoFactorRequired");
     case "last_eligible_admin_handoff_required":
-      return "Promote another member to admin in your team workspace(s) before closing your account.";
+      return translate("chrome.closeButton.error.adminHandoffRequired");
     default: {
       const exhaustive: never = payload.code;
-      return `Unexpected error: ${String(exhaustive)}`;
+      return translate("chrome.closeButton.error.unexpected", { code: String(exhaustive) });
     }
   }
 }

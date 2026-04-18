@@ -1,8 +1,10 @@
 import { TwoFactorChallenge } from "@/components/features/auth/two-factor-challenge";
+import { getServerTranslator } from "@/lib/i18n/server";
 
-export const metadata = {
-  title: "Two-factor verification",
-};
+export async function generateMetadata() {
+  const { translate } = await getServerTranslator();
+  return { title: translate("auth.twoFactor.title") };
+}
 
 // After a successful password / magic-link / OAuth sign-in, Better Auth's
 // `twoFactor` plugin returns `{ twoFactorRedirect: true }` and sets a
@@ -13,11 +15,12 @@ export const metadata = {
 // the server interactions.
 export default async function TwoFactorPage({ searchParams }: { searchParams: Promise<{ from?: string }> }) {
   const { from } = await searchParams;
+  const { translate } = await getServerTranslator();
   return (
     <main className="mx-auto flex min-h-svh max-w-md flex-col justify-center gap-6 p-6">
       <header className="flex flex-col gap-2">
-        <h1 className="text-2xl font-semibold">Two-factor verification</h1>
-        <p className="text-sm text-muted-foreground">Enter the 6-digit code from your authenticator app to finish signing in.</p>
+        <h1 className="text-2xl font-semibold">{translate("auth.twoFactor.title")}</h1>
+        <p className="text-sm text-muted-foreground">{translate("auth.twoFactor.subtitle")}</p>
       </header>
       <TwoFactorChallenge from={from} />
     </main>

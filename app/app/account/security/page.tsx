@@ -7,13 +7,15 @@ import { TwoFactorSettings } from "@/components/features/auth/two-factor-setting
 import { Button } from "@/components/ui/button";
 import { getAuth } from "@/lib/auth/instance";
 import { verifyRecentAuth } from "@/lib/auth/recent-auth";
+import { getServerTranslator } from "@/lib/i18n/server";
 import { REACTIVATION_WINDOW_DAYS } from "@/lib/server/accounts";
 import { getDb } from "@/lib/server/db/client";
 import { user as userTable } from "@/lib/server/db/schema";
 
-export const metadata = {
-  title: "Account security",
-};
+export async function generateMetadata() {
+  const { translate } = await getServerTranslator();
+  return { title: translate("chrome.accountSecurity.title") };
+}
 
 // Recent-auth gate: two-factor management is sensitive enough that we
 // require a fresh authentication marker before rendering the controls.
@@ -38,28 +40,25 @@ export default async function AccountSecurityPage() {
     redirect("/account/recent-auth?from=/account/security");
   }
 
+  const { translate } = await getServerTranslator();
+
   return (
     <main className="mx-auto flex min-h-svh max-w-xl flex-col gap-6 p-6">
       <header className="flex flex-col gap-2">
-        <h1 className="text-2xl font-semibold">Account security</h1>
-        <p className="text-sm text-muted-foreground">
-          Add a second step to sign-ins and manage your recovery options. Two-factor authentication is optional but strongly recommended.
-        </p>
+        <h1 className="text-2xl font-semibold">{translate("chrome.accountSecurity.heading")}</h1>
+        <p className="text-sm text-muted-foreground">{translate("chrome.accountSecurity.subtitle")}</p>
       </header>
 
       <TwoFactorSettings initialEnabled={Boolean(session.user.twoFactorEnabled)} />
 
       <section className="flex flex-col gap-3 rounded-lg border border-destructive/30 p-4">
         <header className="flex flex-col gap-1">
-          <h2 className="text-base font-medium text-destructive">Close account</h2>
-          <p className="text-sm text-muted-foreground">
-            Closing your account signs you out everywhere and starts a {REACTIVATION_WINDOW_DAYS}-day reactivation window. After the window elapses the account
-            is permanently deleted.
-          </p>
+          <h2 className="text-base font-medium text-destructive">{translate("chrome.accountSecurity.close.heading")}</h2>
+          <p className="text-sm text-muted-foreground">{translate("chrome.accountSecurity.close.body", { days: REACTIVATION_WINDOW_DAYS })}</p>
         </header>
         <div>
           <Button asChild variant="destructive">
-            <Link href="/account/close">Close my account…</Link>
+            <Link href="/account/close">{translate("chrome.accountSecurity.close.cta")}</Link>
           </Button>
         </div>
       </section>

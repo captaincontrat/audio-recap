@@ -6,6 +6,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useTranslator } from "@/lib/i18n/provider";
 
 type PromptResponse = { ok: true } | { ok: false; reason: "no-session" | "no-credential" | "invalid-password" };
 
@@ -14,6 +15,7 @@ function isSafeRedirect(target: string | undefined): target is string {
 }
 
 export function RecentAuthPrompt({ from }: { from: string | undefined }) {
+  const translate = useTranslator();
   const router = useRouter();
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -31,11 +33,11 @@ export function RecentAuthPrompt({ from }: { from: string | undefined }) {
       });
       const payload = (await response.json().catch(() => null)) as PromptResponse | null;
       if (!payload) {
-        setError("Unexpected response from the server.");
+        setError(translate("common.form.unexpectedServerResponse"));
         return;
       }
       if (!payload.ok) {
-        setError(payload.reason === "no-credential" ? "Password re-entry is not available for this account." : "Password does not match.");
+        setError(payload.reason === "no-credential" ? translate("auth.recentAuth.error.noCredential") : translate("auth.recentAuth.error.mismatch"));
         return;
       }
       router.push(isSafeRedirect(from) ? from : "/account/security");
@@ -48,7 +50,7 @@ export function RecentAuthPrompt({ from }: { from: string | undefined }) {
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-4" noValidate>
       <div className="flex flex-col gap-1.5">
-        <Label htmlFor="current-password">Password</Label>
+        <Label htmlFor="current-password">{translate("common.password.label")}</Label>
         <Input
           id="current-password"
           type="password"
@@ -64,7 +66,7 @@ export function RecentAuthPrompt({ from }: { from: string | undefined }) {
         </p>
       ) : null}
       <Button type="submit" disabled={submitting}>
-        {submitting ? "Verifying…" : "Confirm password"}
+        {submitting ? translate("auth.recentAuth.submit.loading") : translate("auth.recentAuth.submit")}
       </Button>
     </form>
   );

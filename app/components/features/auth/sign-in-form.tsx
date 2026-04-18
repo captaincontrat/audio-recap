@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { type SignInInput, signInInputSchema } from "@/lib/auth/schemas";
+import { localizeAuthError } from "@/lib/i18n/auth-errors";
+import { useTranslator } from "@/lib/i18n/provider";
 
 type SignInApiResponse =
   | { ok: true; userId: string; emailVerified: boolean }
@@ -31,6 +33,7 @@ function buildTwoFactorUrl(from: string | undefined): string {
 export function SignInForm({ redirectPromise }: { redirectPromise: Promise<{ from?: string }> }) {
   const { from } = use(redirectPromise);
   const router = useRouter();
+  const translate = useTranslator();
   const [serverError, setServerError] = useState<string | null>(null);
   const {
     register,
@@ -50,11 +53,11 @@ export function SignInForm({ redirectPromise }: { redirectPromise: Promise<{ fro
     });
     const payload = (await response.json().catch(() => null)) as SignInApiResponse | null;
     if (!payload) {
-      setServerError("Unexpected response from the server.");
+      setServerError(translate("common.form.unexpectedServerResponse"));
       return;
     }
     if (!payload.ok) {
-      setServerError(payload.message);
+      setServerError(localizeAuthError({ code: payload.code, translate, fallback: payload.message }));
       return;
     }
     if ("twoFactorRequired" in payload) {
@@ -70,12 +73,12 @@ export function SignInForm({ redirectPromise }: { redirectPromise: Promise<{ fro
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4" noValidate>
       <div className="flex flex-col gap-1.5">
-        <Label htmlFor="email">Email</Label>
+        <Label htmlFor="email">{translate("common.email.label")}</Label>
         <Input id="email" type="email" autoComplete="email" required {...register("email")} />
         {errors.email ? <p className="text-xs text-destructive">{errors.email.message}</p> : null}
       </div>
       <div className="flex flex-col gap-1.5">
-        <Label htmlFor="password">Password</Label>
+        <Label htmlFor="password">{translate("common.password.label")}</Label>
         <Input id="password" type="password" autoComplete="current-password" required {...register("password")} />
         {errors.password ? <p className="text-xs text-destructive">{errors.password.message}</p> : null}
       </div>
@@ -85,7 +88,7 @@ export function SignInForm({ redirectPromise }: { redirectPromise: Promise<{ fro
         </p>
       ) : null}
       <Button type="submit" disabled={isSubmitting}>
-        {isSubmitting ? "Signing in…" : "Sign in"}
+        {isSubmitting ? translate("auth.signIn.submit.loading") : translate("auth.signIn.submit")}
       </Button>
     </form>
   );

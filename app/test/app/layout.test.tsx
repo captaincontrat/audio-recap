@@ -12,11 +12,15 @@ vi.mock("next/font/google", () => {
   };
 });
 
+vi.mock("@/lib/i18n/server", () => ({
+  getServerLocale: vi.fn(async () => ({ locale: "en", source: "default" })),
+}));
+
 import RootLayout from "@/app/layout";
 
-test("RootLayout configures the document shell", () => {
+test("RootLayout configures the document shell", async () => {
   const child = <span id="child">Child</span>;
-  const html = RootLayout({ children: child });
+  const html = await RootLayout({ children: child });
 
   expect(html.type).toBe("html");
   expect(html.props.lang).toBe("en");
@@ -28,7 +32,9 @@ test("RootLayout configures the document shell", () => {
 
   const body = html.props.children;
   const themeProvider = body.props.children;
+  const localeProvider = themeProvider.props.children;
 
   expect(body.type).toBe("body");
-  expect(themeProvider.props.children).toBe(child);
+  expect(localeProvider.props.locale).toBe("en");
+  expect(localeProvider.props.children).toBe(child);
 });

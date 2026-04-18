@@ -9,12 +9,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { type SignUpInput, signUpInputSchema } from "@/lib/auth/schemas";
+import { localizeAuthError } from "@/lib/i18n/auth-errors";
+import { useTranslator } from "@/lib/i18n/provider";
 import { cn } from "@/lib/utils";
 
 type SignUpApiResponse = { ok: true; userId: string; verificationExpiresAt: string } | { ok: false; code: string; message: string };
 
 export function SignUpForm() {
   const router = useRouter();
+  const translate = useTranslator();
   const [serverError, setServerError] = useState<string | null>(null);
   const {
     register,
@@ -34,11 +37,11 @@ export function SignUpForm() {
     });
     const payload = (await response.json().catch(() => null)) as SignUpApiResponse | null;
     if (!payload) {
-      setServerError("Unexpected response from the server.");
+      setServerError(translate("common.form.unexpectedServerResponse"));
       return;
     }
     if (!payload.ok) {
-      setServerError(payload.message);
+      setServerError(localizeAuthError({ code: payload.code, translate, fallback: payload.message }));
       return;
     }
     router.push("/verify-email?sent=1");
@@ -47,13 +50,13 @@ export function SignUpForm() {
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4" noValidate>
-      <Field label="Name (optional)" htmlFor="name" error={errors.name?.message}>
+      <Field label={translate("auth.signUp.name.label")} htmlFor="name" error={errors.name?.message}>
         <Input id="name" autoComplete="name" {...register("name")} />
       </Field>
-      <Field label="Email" htmlFor="email" error={errors.email?.message}>
+      <Field label={translate("common.email.label")} htmlFor="email" error={errors.email?.message}>
         <Input id="email" type="email" autoComplete="email" required {...register("email")} />
       </Field>
-      <Field label="Password" htmlFor="password" error={errors.password?.message}>
+      <Field label={translate("common.password.label")} htmlFor="password" error={errors.password?.message}>
         <Input id="password" type="password" autoComplete="new-password" required {...register("password")} />
       </Field>
       {serverError ? (
@@ -62,7 +65,7 @@ export function SignUpForm() {
         </p>
       ) : null}
       <Button type="submit" disabled={isSubmitting}>
-        {isSubmitting ? "Creating account…" : "Create account"}
+        {isSubmitting ? translate("auth.signUp.submit.loading") : translate("auth.signUp.submit")}
       </Button>
     </form>
   );

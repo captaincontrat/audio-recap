@@ -9,13 +9,15 @@ import { Button } from "@/components/ui/button";
 import { getAuth } from "@/lib/auth/instance";
 import { verifyRecentAuth } from "@/lib/auth/recent-auth";
 import { RECENT_AUTH_MAX_AGE_SECONDS } from "@/lib/auth/two-factor-config";
+import { getServerTranslator } from "@/lib/i18n/server";
 import { evaluateAdminHandoffForClosure } from "@/lib/server/accounts";
 import { getDb } from "@/lib/server/db/client";
 import { session as sessionTable, twoFactor as twoFactorTable, user as userTable } from "@/lib/server/db/schema";
 
-export const metadata = {
-  title: "Close your account",
-};
+export async function generateMetadata() {
+  const { translate } = await getServerTranslator();
+  return { title: translate("chrome.accountClose.title") };
+}
 
 export const dynamic = "force-dynamic";
 
@@ -78,41 +80,37 @@ export default async function CloseAccountPage() {
   const adminChecks = await evaluateAdminHandoffForClosure({ userId: session.user.id });
   const blockingWorkspaces = adminChecks.filter((check) => check.lastEligibleActiveAdmin).map((check) => check.workspaceId);
 
+  const { translate } = await getServerTranslator();
+
   return (
     <main className="mx-auto flex min-h-svh max-w-xl flex-col gap-6 p-6">
       <header className="flex flex-col gap-2">
-        <h1 className="text-2xl font-semibold">Close your account</h1>
-        <p className="text-sm text-muted-foreground">
-          Closing your account signs you out on every device and starts a 30-day window during which you can reactivate by signing in again. After the window
-          elapses the account is permanently deleted.
-        </p>
+        <h1 className="text-2xl font-semibold">{translate("chrome.accountClose.heading")}</h1>
+        <p className="text-sm text-muted-foreground">{translate("chrome.accountClose.subtitle")}</p>
       </header>
 
       <section className="flex flex-col gap-3 rounded-lg border border-border p-4 text-sm">
-        <h2 className="font-medium">What happens right away</h2>
+        <h2 className="font-medium">{translate("chrome.accountClose.immediate.heading")}</h2>
         <ul className="list-disc pl-5 text-muted-foreground">
-          <li>Your active sessions are revoked.</li>
-          <li>You lose access to dashboards, meetings, and team workspaces.</li>
-          <li>Your personal workspace is preserved during the 30-day window.</li>
+          <li>{translate("chrome.accountClose.immediate.item1")}</li>
+          <li>{translate("chrome.accountClose.immediate.item2")}</li>
+          <li>{translate("chrome.accountClose.immediate.item3")}</li>
         </ul>
       </section>
 
       <section className="flex flex-col gap-3 rounded-lg border border-border p-4 text-sm">
-        <h2 className="font-medium">After 30 days</h2>
+        <h2 className="font-medium">{translate("chrome.accountClose.after.heading")}</h2>
         <ul className="list-disc pl-5 text-muted-foreground">
-          <li>Your account is permanently deleted.</li>
-          <li>Your personal workspace is deleted with it.</li>
-          <li>Transcripts in shared team workspaces remain under those workspaces.</li>
+          <li>{translate("chrome.accountClose.after.item1")}</li>
+          <li>{translate("chrome.accountClose.after.item2")}</li>
+          <li>{translate("chrome.accountClose.after.item3")}</li>
         </ul>
       </section>
 
       {!freshTwoFactorOk ? (
         <section className="flex flex-col gap-2 rounded-lg border border-destructive/40 bg-destructive/5 p-4 text-sm">
-          <h2 className="font-medium text-destructive">One more step</h2>
-          <p className="text-muted-foreground">
-            Closing your account requires a fresh sign-in with your authenticator. Sign out, sign in again with your password and two-factor code, then return
-            to this page to confirm.
-          </p>
+          <h2 className="font-medium text-destructive">{translate("chrome.accountClose.fresh2fa.heading")}</h2>
+          <p className="text-muted-foreground">{translate("chrome.accountClose.fresh2fa.body")}</p>
           <div>
             <FreshSignInButton destination="/account/close" />
           </div>
@@ -121,10 +119,8 @@ export default async function CloseAccountPage() {
 
       {blockingWorkspaces.length > 0 ? (
         <section className="flex flex-col gap-2 rounded-lg border border-destructive/40 bg-destructive/5 p-4 text-sm">
-          <h2 className="font-medium text-destructive">Hand off admin responsibility first</h2>
-          <p className="text-muted-foreground">
-            You are the last eligible admin in the following team workspace(s). Promote another member to admin before closing your account:
-          </p>
+          <h2 className="font-medium text-destructive">{translate("chrome.accountClose.handoff.heading")}</h2>
+          <p className="text-muted-foreground">{translate("chrome.accountClose.handoff.body")}</p>
           <ul className="list-disc pl-5 text-muted-foreground">
             {blockingWorkspaces.map((workspaceId) => (
               <li key={workspaceId}>
@@ -138,7 +134,7 @@ export default async function CloseAccountPage() {
       <div className="flex flex-col gap-4 pt-2">
         {freshTwoFactorOk && blockingWorkspaces.length === 0 ? <CloseAccountButton /> : null}
         <Button asChild variant="ghost">
-          <Link href="/account/security">Cancel</Link>
+          <Link href="/account/security">{translate("chrome.accountClose.cancel")}</Link>
         </Button>
       </div>
     </main>

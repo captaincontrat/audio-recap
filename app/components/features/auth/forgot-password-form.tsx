@@ -8,8 +8,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { type ForgotPasswordInput, forgotPasswordInputSchema } from "@/lib/auth/schemas";
+import { useTranslator } from "@/lib/i18n/provider";
 
 export function ForgotPasswordForm() {
+  const translate = useTranslator();
   const [notice, setNotice] = useState<string | null>(null);
   const {
     register,
@@ -27,13 +29,17 @@ export function ForgotPasswordForm() {
       body: JSON.stringify(values),
     });
     const payload = (await response.json().catch(() => null)) as { ok: boolean; message: string } | null;
-    setNotice(payload?.message ?? "If an account exists for that address, you'll receive a password reset email shortly.");
+    // Server always responds with the enumeration-safe generic notice, so we
+    // show the localized notice regardless of the server message to keep the
+    // wording consistent with the active locale.
+    setNotice(translate("auth.forgotPassword.defaultNotice"));
+    void payload;
   }
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4" noValidate>
       <div className="flex flex-col gap-1.5">
-        <Label htmlFor="email">Email</Label>
+        <Label htmlFor="email">{translate("common.email.label")}</Label>
         <Input id="email" type="email" autoComplete="email" required {...register("email")} />
         {errors.email ? <p className="text-xs text-destructive">{errors.email.message}</p> : null}
       </div>
@@ -43,7 +49,7 @@ export function ForgotPasswordForm() {
         </p>
       ) : null}
       <Button type="submit" disabled={isSubmitting}>
-        {isSubmitting ? "Sending…" : "Send reset link"}
+        {isSubmitting ? translate("auth.forgotPassword.submit.loading") : translate("auth.forgotPassword.submit")}
       </Button>
     </form>
   );

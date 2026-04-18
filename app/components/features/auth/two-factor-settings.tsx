@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { authClient } from "@/lib/auth/client";
+import { localizeAuthError } from "@/lib/i18n/auth-errors";
+import { useTranslator } from "@/lib/i18n/provider";
 
 type Stage =
   | { kind: "idle" }
@@ -23,6 +25,7 @@ type Stage =
 // action — only on `enable` / `disable` / `generateBackupCodes` because
 // the Better Auth endpoints require it directly.
 export function TwoFactorSettings({ initialEnabled }: { initialEnabled: boolean }) {
+  const translate = useTranslator();
   const [stage, setStage] = useState<Stage>(initialEnabled ? { kind: "enabled" } : { kind: "idle" });
   const [password, setPassword] = useState("");
   const [verifyCode, setVerifyCode] = useState("");
@@ -36,7 +39,14 @@ export function TwoFactorSettings({ initialEnabled }: { initialEnabled: boolean 
     try {
       const { data, error: callError } = await authClient.twoFactor.enable({ password });
       if (callError || !data) {
-        setError(callError?.message ?? "Could not start two-factor setup.");
+        const typed = callError as { code?: string; message?: string } | null | undefined;
+        setError(
+          localizeAuthError({
+            code: typed?.code,
+            translate,
+            fallback: typed?.message ?? translate("auth.twoFactorSettings.enable.error"),
+          }),
+        );
         return;
       }
       setStage({ kind: "enrolling", totpURI: data.totpURI, backupCodes: data.backupCodes });
@@ -54,7 +64,14 @@ export function TwoFactorSettings({ initialEnabled }: { initialEnabled: boolean 
       if (stage.kind !== "enrolling" && stage.kind !== "verifying") return;
       const { error: callError } = await authClient.twoFactor.verifyTotp({ code: verifyCode.trim() });
       if (callError) {
-        setError(callError.message ?? "That code did not match.");
+        const typed = callError as { code?: string; message?: string };
+        setError(
+          localizeAuthError({
+            code: typed.code,
+            translate,
+            fallback: typed.message ?? translate("auth.twoFactorSettings.enroll.error"),
+          }),
+        );
         return;
       }
       setStage({ kind: "enabled", backupCodes: stage.backupCodes });
@@ -71,7 +88,14 @@ export function TwoFactorSettings({ initialEnabled }: { initialEnabled: boolean 
     try {
       const { error: callError } = await authClient.twoFactor.disable({ password });
       if (callError) {
-        setError(callError.message ?? "Could not disable two-factor authentication.");
+        const typed = callError as { code?: string; message?: string };
+        setError(
+          localizeAuthError({
+            code: typed.code,
+            translate,
+            fallback: typed.message ?? translate("auth.twoFactorSettings.disable.error"),
+          }),
+        );
         return;
       }
       setStage({ kind: "idle" });
@@ -88,7 +112,14 @@ export function TwoFactorSettings({ initialEnabled }: { initialEnabled: boolean 
     try {
       const { data, error: callError } = await authClient.twoFactor.generateBackupCodes({ password });
       if (callError || !data) {
-        setError(callError?.message ?? "Could not regenerate backup codes.");
+        const typed = callError as { code?: string; message?: string } | null | undefined;
+        setError(
+          localizeAuthError({
+            code: typed?.code,
+            translate,
+            fallback: typed?.message ?? translate("auth.twoFactorSettings.regenerate.error"),
+          }),
+        );
         return;
       }
       setStage({ kind: "enabled", backupCodes: data.backupCodes });
@@ -109,11 +140,11 @@ export function TwoFactorSettings({ initialEnabled }: { initialEnabled: boolean 
       {stage.kind === "idle" ? (
         <form onSubmit={handleEnable} className="flex flex-col gap-4 rounded-md border border-border p-4">
           <div className="flex flex-col gap-1">
-            <h2 className="text-lg font-medium">Enable two-factor authentication</h2>
-            <p className="text-sm text-muted-foreground">Confirm your password to start the setup flow.</p>
+            <h2 className="text-lg font-medium">{translate("auth.twoFactorSettings.enable.title")}</h2>
+            <p className="text-sm text-muted-foreground">{translate("auth.twoFactorSettings.enable.subtitle")}</p>
           </div>
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="enable-password">Password</Label>
+            <Label htmlFor="enable-password">{translate("common.password.label")}</Label>
             <Input
               id="enable-password"
               type="password"
@@ -124,7 +155,7 @@ export function TwoFactorSettings({ initialEnabled }: { initialEnabled: boolean 
             />
           </div>
           <Button type="submit" disabled={busy}>
-            {busy ? "Starting…" : "Start setup"}
+            {busy ? translate("auth.twoFactorSettings.enable.submit.loading") : translate("auth.twoFactorSettings.enable.submit")}
           </Button>
         </form>
       ) : null}
@@ -132,16 +163,16 @@ export function TwoFactorSettings({ initialEnabled }: { initialEnabled: boolean 
       {stage.kind === "enrolling" || stage.kind === "verifying" ? (
         <div className="flex flex-col gap-4 rounded-md border border-border p-4">
           <div className="flex flex-col gap-1">
-            <h2 className="text-lg font-medium">Scan and verify</h2>
-            <p className="text-sm text-muted-foreground">Add this account to your authenticator app, then enter a code below to finish setup.</p>
+            <h2 className="text-lg font-medium">{translate("auth.twoFactorSettings.enroll.title")}</h2>
+            <p className="text-sm text-muted-foreground">{translate("auth.twoFactorSettings.enroll.subtitle")}</p>
           </div>
-          <pre className="overflow-x-auto rounded-md bg-muted p-3 text-xs" aria-label="Authenticator provisioning URI">
+          <pre className="overflow-x-auto rounded-md bg-muted p-3 text-xs" aria-label={translate("auth.twoFactorSettings.enroll.uri.ariaLabel")}>
             {stage.totpURI}
           </pre>
           <BackupCodesList codes={stage.backupCodes} />
           <form onSubmit={handleVerifyEnrollment} className="flex flex-col gap-3">
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="verify-code">Enter the 6-digit code</Label>
+              <Label htmlFor="verify-code">{translate("auth.twoFactorSettings.enroll.code.label")}</Label>
               <Input
                 id="verify-code"
                 type="text"
@@ -153,7 +184,7 @@ export function TwoFactorSettings({ initialEnabled }: { initialEnabled: boolean 
               />
             </div>
             <Button type="submit" disabled={busy}>
-              {busy ? "Verifying…" : "Verify and enable"}
+              {busy ? translate("auth.twoFactorSettings.enroll.submit.loading") : translate("auth.twoFactorSettings.enroll.submit")}
             </Button>
           </form>
         </div>
@@ -162,17 +193,17 @@ export function TwoFactorSettings({ initialEnabled }: { initialEnabled: boolean 
       {stage.kind === "enabled" ? (
         <div className="flex flex-col gap-6">
           <div className="flex flex-col gap-1 rounded-md border border-emerald-500/40 bg-emerald-500/5 p-4">
-            <h2 className="text-lg font-medium">Two-factor is on</h2>
-            <p className="text-sm text-muted-foreground">Future sign-ins on untrusted devices will require a verification code.</p>
+            <h2 className="text-lg font-medium">{translate("auth.twoFactorSettings.enabled.title")}</h2>
+            <p className="text-sm text-muted-foreground">{translate("auth.twoFactorSettings.enabled.subtitle")}</p>
           </div>
 
           {stage.backupCodes ? <BackupCodesList codes={stage.backupCodes} /> : null}
 
           <form onSubmit={handleRegenerate} className="flex flex-col gap-3 rounded-md border border-border p-4">
-            <h3 className="text-base font-medium">Regenerate backup codes</h3>
-            <p className="text-sm text-muted-foreground">Existing codes stop working once you regenerate. Save the new set somewhere safe.</p>
+            <h3 className="text-base font-medium">{translate("auth.twoFactorSettings.regenerate.title")}</h3>
+            <p className="text-sm text-muted-foreground">{translate("auth.twoFactorSettings.regenerate.subtitle")}</p>
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="regen-password">Password</Label>
+              <Label htmlFor="regen-password">{translate("common.password.label")}</Label>
               <Input
                 id="regen-password"
                 type="password"
@@ -183,15 +214,15 @@ export function TwoFactorSettings({ initialEnabled }: { initialEnabled: boolean 
               />
             </div>
             <Button type="submit" variant="secondary" disabled={busy}>
-              {busy ? "Regenerating…" : "Regenerate backup codes"}
+              {busy ? translate("auth.twoFactorSettings.regenerate.submit.loading") : translate("auth.twoFactorSettings.regenerate.submit")}
             </Button>
           </form>
 
           <form onSubmit={handleDisable} className="flex flex-col gap-3 rounded-md border border-border p-4">
-            <h3 className="text-base font-medium">Disable two-factor</h3>
-            <p className="text-sm text-muted-foreground">Turning it off removes the second step from every future sign-in.</p>
+            <h3 className="text-base font-medium">{translate("auth.twoFactorSettings.disable.title")}</h3>
+            <p className="text-sm text-muted-foreground">{translate("auth.twoFactorSettings.disable.subtitle")}</p>
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="disable-password">Password</Label>
+              <Label htmlFor="disable-password">{translate("common.password.label")}</Label>
               <Input
                 id="disable-password"
                 type="password"
@@ -202,7 +233,7 @@ export function TwoFactorSettings({ initialEnabled }: { initialEnabled: boolean 
               />
             </div>
             <Button type="submit" variant="destructive" disabled={busy}>
-              {busy ? "Disabling…" : "Disable two-factor"}
+              {busy ? translate("auth.twoFactorSettings.disable.submit.loading") : translate("auth.twoFactorSettings.disable.submit")}
             </Button>
           </form>
         </div>
@@ -212,11 +243,12 @@ export function TwoFactorSettings({ initialEnabled }: { initialEnabled: boolean 
 }
 
 function BackupCodesList({ codes }: { codes: string[] }) {
+  const translate = useTranslator();
   if (codes.length === 0) return null;
   return (
     <div className="flex flex-col gap-2 rounded-md border border-dashed border-border p-3">
-      <h3 className="text-base font-medium">Backup codes</h3>
-      <p className="text-sm text-muted-foreground">Save these codes somewhere safe. Each one is single-use.</p>
+      <h3 className="text-base font-medium">{translate("auth.twoFactorSettings.backupCodes.title")}</h3>
+      <p className="text-sm text-muted-foreground">{translate("auth.twoFactorSettings.backupCodes.subtitle")}</p>
       <ul className="grid grid-cols-2 gap-2 font-mono text-sm">
         {codes.map((code) => (
           <li key={code}>{code}</li>

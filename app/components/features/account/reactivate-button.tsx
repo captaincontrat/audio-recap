@@ -4,6 +4,8 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { useTranslator } from "@/lib/i18n/provider";
+import type { Translator } from "@/lib/i18n/translator";
 
 type ApiSuccess = { ok: true };
 type ApiFailure = { ok: false; code: "unauthenticated" | "fresh_auth_required" | "not_closed" | "window_expired" };
@@ -15,6 +17,7 @@ type ApiResponse = ApiSuccess | ApiFailure;
 // so "click to reactivate" is all the UI needs. On failure the error
 // copy steers the user back through a fresh sign-in.
 export function ReactivateButton() {
+  const translate = useTranslator();
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -26,11 +29,11 @@ export function ReactivateButton() {
       const response = await fetch("/api/account/reactivate", { method: "POST", headers: { "content-type": "application/json" } });
       const payload = (await response.json().catch(() => null)) as ApiResponse | null;
       if (!payload) {
-        setError("Unexpected response from the server.");
+        setError(translate("common.form.unexpectedServerResponse"));
         return;
       }
       if (!payload.ok) {
-        setError(describeFailure(payload));
+        setError(describeFailure(payload, translate));
         return;
       }
       router.push("/dashboard");
@@ -43,7 +46,7 @@ export function ReactivateButton() {
   return (
     <div className="flex flex-col gap-2">
       <Button type="button" onClick={onClick} disabled={submitting}>
-        {submitting ? "Reactivating…" : "Reactivate my account"}
+        {submitting ? translate("chrome.reactivateButton.submit.loading") : translate("chrome.reactivateButton.submit")}
       </Button>
       {error ? (
         <p role="alert" className="text-sm text-destructive">
@@ -54,19 +57,19 @@ export function ReactivateButton() {
   );
 }
 
-function describeFailure(payload: ApiFailure): string {
+function describeFailure(payload: ApiFailure, translate: Translator): string {
   switch (payload.code) {
     case "unauthenticated":
-      return "Your session has expired. Sign in again to reactivate.";
+      return translate("chrome.reactivateButton.error.unauthenticated");
     case "fresh_auth_required":
-      return "Please sign in again before reactivating.";
+      return translate("chrome.reactivateButton.error.freshAuthRequired");
     case "not_closed":
-      return "This account is not closed.";
+      return translate("chrome.reactivateButton.error.notClosed");
     case "window_expired":
-      return "The 30-day reactivation window has elapsed. Your account will be permanently deleted shortly.";
+      return translate("chrome.reactivateButton.error.windowExpired");
     default: {
       const exhaustive: never = payload.code;
-      return `Unexpected error: ${String(exhaustive)}`;
+      return translate("chrome.reactivateButton.error.unexpected", { code: String(exhaustive) });
     }
   }
 }

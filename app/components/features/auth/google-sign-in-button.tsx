@@ -4,6 +4,8 @@ import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { authClient } from "@/lib/auth/client";
+import { localizeAuthError } from "@/lib/i18n/auth-errors";
+import { useTranslator } from "@/lib/i18n/provider";
 
 // Rendered only when `NEXT_PUBLIC_GOOGLE_CLIENT_ID` is set; the page-level
 // check keeps the button off the DOM for deployments that haven't wired up
@@ -11,6 +13,7 @@ import { authClient } from "@/lib/auth/client";
 // state so the user lands back on the same destination they originally
 // requested (or `/dashboard` as a safe default).
 export function GoogleSignInButton({ callbackURL = "/dashboard" }: { callbackURL?: string }) {
+  const translate = useTranslator();
   const [isPending, setIsPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -19,7 +22,14 @@ export function GoogleSignInButton({ callbackURL = "/dashboard" }: { callbackURL
     setIsPending(true);
     const result = await authClient.signIn.social({ provider: "google", callbackURL });
     if (result?.error) {
-      setError(result.error.message ?? "We couldn't start Google sign-in.");
+      const apiError = result.error as { code?: string; message?: string };
+      setError(
+        localizeAuthError({
+          code: apiError.code,
+          translate,
+          fallback: apiError.message ?? translate("auth.google.signIn.error"),
+        }),
+      );
       setIsPending(false);
       return;
     }
@@ -29,8 +39,9 @@ export function GoogleSignInButton({ callbackURL = "/dashboard" }: { callbackURL
 
   return (
     <div className="flex flex-col gap-1.5">
-      <Button type="button" variant="outline" onClick={onClick} disabled={isPending} aria-label="Sign in with Google">
-        <GoogleGlyph aria-hidden="true" /> {isPending ? "Opening Google…" : "Continue with Google"}
+      <Button type="button" variant="outline" onClick={onClick} disabled={isPending} aria-label={translate("auth.google.signIn.ariaLabel")}>
+        <GoogleGlyph aria-hidden="true" logoLabel={translate("auth.google.signIn.logo")} />{" "}
+        {isPending ? translate("auth.google.signIn.loading") : translate("auth.google.signIn")}
       </Button>
       {error ? (
         <p role="alert" className="text-xs text-destructive">
@@ -41,9 +52,9 @@ export function GoogleSignInButton({ callbackURL = "/dashboard" }: { callbackURL
   );
 }
 
-function GoogleGlyph(props: React.SVGProps<SVGSVGElement>) {
+function GoogleGlyph({ logoLabel, ...props }: React.SVGProps<SVGSVGElement> & { logoLabel: string }) {
   return (
-    <svg viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Google logo" {...props}>
+    <svg viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label={logoLabel} {...props}>
       <path
         d="M17.64 9.2c0-.637-.057-1.251-.163-1.84H9v3.481h4.844a4.14 4.14 0 01-1.796 2.716v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.615z"
         fill="#4285F4"

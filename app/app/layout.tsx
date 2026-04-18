@@ -2,6 +2,8 @@ import { Geist, Geist_Mono, Merriweather } from "next/font/google";
 
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
+import { LocaleProvider } from "@/lib/i18n/provider";
+import { getServerLocale } from "@/lib/i18n/server";
 import { cn } from "@/lib/utils";
 
 const merriweather = Merriweather({ subsets: ["latin"], variable: "--font-serif" });
@@ -16,15 +18,18 @@ const fontMono = Geist_Mono({
   variable: "--font-mono",
 });
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const { locale } = await getServerLocale();
   return (
-    <html lang="en" suppressHydrationWarning className={cn("antialiased", fontSans.variable, fontMono.variable, "font-serif", merriweather.variable)}>
+    <html lang={locale} suppressHydrationWarning className={cn("antialiased", fontSans.variable, fontMono.variable, "font-serif", merriweather.variable)}>
       <body>
-        <ThemeProvider>{children}</ThemeProvider>
+        <ThemeProvider>
+          <LocaleProvider locale={locale}>{children}</LocaleProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

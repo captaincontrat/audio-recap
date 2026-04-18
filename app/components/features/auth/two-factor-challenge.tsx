@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { authClient } from "@/lib/auth/client";
+import { localizeAuthError } from "@/lib/i18n/auth-errors";
+import { useTranslator } from "@/lib/i18n/provider";
 
 type Mode = "totp" | "email-otp" | "backup-code";
 
@@ -24,6 +26,7 @@ function isSafeRedirect(target: string | undefined): target is string {
 // we redirect to the originally requested page.
 export function TwoFactorChallenge({ from }: { from: string | undefined }) {
   const router = useRouter();
+  const translate = useTranslator();
   const [mode, setMode] = useState<Mode>("totp");
   const [code, setCode] = useState("");
   const [trustDevice, setTrustDevice] = useState(false);
@@ -41,7 +44,7 @@ export function TwoFactorChallenge({ from }: { from: string | undefined }) {
     try {
       const trimmed = code.trim();
       if (!trimmed) {
-        setServerError("Enter your verification code.");
+        setServerError(translate("auth.twoFactor.error.empty"));
         return;
       }
 
@@ -53,7 +56,14 @@ export function TwoFactorChallenge({ from }: { from: string | undefined }) {
             : await authClient.twoFactor.verifyBackupCode({ code: trimmed, trustDevice });
 
       if (error) {
-        setServerError(error.message ?? "That code did not work. Try again.");
+        const typed = error as { code?: string; message?: string };
+        setServerError(
+          localizeAuthError({
+            code: typed.code,
+            translate,
+            fallback: typed.message ?? translate("auth.twoFactor.error.generic"),
+          }),
+        );
         return;
       }
 
@@ -70,7 +80,14 @@ export function TwoFactorChallenge({ from }: { from: string | undefined }) {
     try {
       const { error } = await authClient.twoFactor.sendOtp();
       if (error) {
-        setServerError(error.message ?? "Could not send the verification email. Try again in a moment.");
+        const typed = error as { code?: string; message?: string };
+        setServerError(
+          localizeAuthError({
+            code: typed.code,
+            translate,
+            fallback: typed.message ?? translate("auth.twoFactor.error.sendOtp"),
+          }),
+        );
         return;
       }
       setOtpSent(true);
@@ -81,21 +98,23 @@ export function TwoFactorChallenge({ from }: { from: string | undefined }) {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex gap-2 text-sm" role="tablist" aria-label="Verification method">
+      <div className="flex gap-2 text-sm" role="tablist" aria-label={translate("auth.twoFactor.methodLabel")}>
         <TabButton active={mode === "totp"} onClick={() => setMode("totp")}>
-          Authenticator app
+          {translate("auth.twoFactor.tab.totp")}
         </TabButton>
         <TabButton active={mode === "email-otp"} onClick={() => setMode("email-otp")}>
-          Email code
+          {translate("auth.twoFactor.tab.email")}
         </TabButton>
         <TabButton active={mode === "backup-code"} onClick={() => setMode("backup-code")}>
-          Backup code
+          {translate("auth.twoFactor.tab.backup")}
         </TabButton>
       </div>
 
       <form onSubmit={handleVerify} className="flex flex-col gap-4" noValidate>
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="two-factor-code">{mode === "backup-code" ? "Backup code" : "Verification code"}</Label>
+          <Label htmlFor="two-factor-code">
+            {mode === "backup-code" ? translate("auth.twoFactor.code.labelBackup") : translate("auth.twoFactor.code.label")}
+          </Label>
           <Input
             id="two-factor-code"
             name="code"
@@ -107,21 +126,19 @@ export function TwoFactorChallenge({ from }: { from: string | undefined }) {
             onChange={(event) => setCode(event.target.value)}
           />
           {mode === "email-otp" ? (
-            <p className="text-xs text-muted-foreground">
-              {otpSent ? "We sent a code to your email. It expires in a few minutes." : "Request a code to receive it at your account email."}
-            </p>
+            <p className="text-xs text-muted-foreground">{otpSent ? translate("auth.twoFactor.email.sent") : translate("auth.twoFactor.email.prompt")}</p>
           ) : null}
         </div>
 
         {mode === "email-otp" ? (
           <Button type="button" variant="secondary" onClick={handleSendOtp} disabled={sendingOtp}>
-            {sendingOtp ? "Sending…" : otpSent ? "Resend email code" : "Send email code"}
+            {sendingOtp ? translate("auth.twoFactor.sendOtp.loading") : otpSent ? translate("auth.twoFactor.resendOtp") : translate("auth.twoFactor.sendOtp")}
           </Button>
         ) : null}
 
         <label className="flex items-center gap-2 text-sm text-muted-foreground">
           <input type="checkbox" checked={trustDevice} onChange={(event) => setTrustDevice(event.target.checked)} />
-          Trust this device for 30 days
+          {translate("auth.twoFactor.trustDevice")}
         </label>
 
         {serverError ? (
@@ -131,7 +148,7 @@ export function TwoFactorChallenge({ from }: { from: string | undefined }) {
         ) : null}
 
         <Button type="submit" disabled={submitting}>
-          {submitting ? "Verifying…" : "Verify and continue"}
+          {submitting ? translate("auth.twoFactor.submit.loading") : translate("auth.twoFactor.submit")}
         </Button>
       </form>
     </div>

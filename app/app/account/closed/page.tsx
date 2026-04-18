@@ -8,13 +8,15 @@ import { ReactivateButton } from "@/components/features/account/reactivate-butto
 import { Button } from "@/components/ui/button";
 import { getAuth } from "@/lib/auth/instance";
 import { verifyRecentAuth } from "@/lib/auth/recent-auth";
+import { getServerLocale, getServerTranslator } from "@/lib/i18n/server";
 import { deriveAccountClosureState, REACTIVATION_WINDOW_DAYS } from "@/lib/server/accounts";
 import { getDb } from "@/lib/server/db/client";
 import { user as userTable } from "@/lib/server/db/schema";
 
-export const metadata = {
-  title: "Account closed",
-};
+export async function generateMetadata() {
+  const { translate } = await getServerTranslator();
+  return { title: translate("chrome.accountClosed.title") };
+}
 
 export const dynamic = "force-dynamic";
 
@@ -31,17 +33,16 @@ export default async function AccountClosedPage() {
   const auth = getAuth();
   const requestHeaders = await headers();
   const session = await auth.api.getSession({ headers: requestHeaders });
+  const { translate } = await getServerTranslator();
+  const { locale } = await getServerLocale();
 
   // Unauthenticated visit: explain what happened and offer a fresh sign-in.
   if (!session?.session || !session.user) {
     return (
       <main className="mx-auto flex min-h-svh max-w-xl flex-col justify-center gap-6 p-6">
         <header className="flex flex-col gap-2">
-          <h1 className="text-2xl font-semibold">Your account is closed</h1>
-          <p className="text-sm text-muted-foreground">
-            Sign in again to reactivate your account. You have {REACTIVATION_WINDOW_DAYS} days from the moment you closed the account before it is permanently
-            deleted.
-          </p>
+          <h1 className="text-2xl font-semibold">{translate("chrome.accountClosed.heading")}</h1>
+          <p className="text-sm text-muted-foreground">{translate("chrome.accountClosed.unauth.body", { days: REACTIVATION_WINDOW_DAYS })}</p>
         </header>
         <FreshSignInButton destination="/account/closed" />
       </main>
@@ -62,21 +63,16 @@ export default async function AccountClosedPage() {
 
   const state = deriveAccountClosureState({ closedAt: userRow.closedAt, scheduledDeleteAt: userRow.scheduledDeleteAt }, new Date());
   const recent = await verifyRecentAuth(session.session.id);
+  const scheduledDeleteLabel = userRow.scheduledDeleteAt?.toLocaleString(locale) ?? translate("chrome.accountClosed.reactivable.unknownDate");
 
   return (
     <main className="mx-auto flex min-h-svh max-w-xl flex-col justify-center gap-6 p-6">
       <header className="flex flex-col gap-2">
-        <h1 className="text-2xl font-semibold">Your account is closed</h1>
+        <h1 className="text-2xl font-semibold">{translate("chrome.accountClosed.heading")}</h1>
         {state === "closed_reactivable" ? (
-          <p className="text-sm text-muted-foreground">
-            You can reactivate this account until <strong className="text-foreground">{userRow.scheduledDeleteAt?.toLocaleString() ?? "soon"}</strong>.
-            Reactivation restores sign-in but does not restore previously revoked sessions or undo workspace changes that happened while the account was closed.
-          </p>
+          <p className="text-sm text-muted-foreground">{translate("chrome.accountClosed.reactivable.body", { deleteDate: scheduledDeleteLabel })}</p>
         ) : (
-          <p className="text-sm text-muted-foreground">
-            The {REACTIVATION_WINDOW_DAYS}-day reactivation window has elapsed. This account will be permanently deleted shortly, and the reactivation button is
-            no longer available.
-          </p>
+          <p className="text-sm text-muted-foreground">{translate("chrome.accountClosed.expired.body", { days: REACTIVATION_WINDOW_DAYS })}</p>
         )}
       </header>
 
@@ -85,16 +81,13 @@ export default async function AccountClosedPage() {
           <ReactivateButton />
         ) : (
           <div className="flex flex-col gap-2 rounded-lg border border-border p-4 text-sm">
-            <p className="text-muted-foreground">
-              To reactivate, sign in again so we can confirm it is really you. If you have two-factor authentication enabled you will be prompted for a fresh
-              code as part of that sign-in.
-            </p>
+            <p className="text-muted-foreground">{translate("chrome.accountClosed.confirmFresh.body")}</p>
             <FreshSignInButton destination="/account/closed" />
           </div>
         )
       ) : (
         <Button asChild variant="ghost">
-          <Link href="/">Back to home</Link>
+          <Link href="/">{translate("chrome.accountClosed.backHome")}</Link>
         </Button>
       )}
     </main>

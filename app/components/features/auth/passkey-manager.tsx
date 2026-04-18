@@ -7,6 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { authClient } from "@/lib/auth/client";
 import { describePasskey, describePasskeyName, type PasskeyDisplayRow } from "@/lib/auth/passkey-display";
+import { localizeAuthError } from "@/lib/i18n/auth-errors";
+import { useTranslator } from "@/lib/i18n/provider";
 
 type PasskeyRow = PasskeyDisplayRow & { id: string };
 
@@ -17,6 +19,7 @@ type PasskeyRow = PasskeyDisplayRow & { id: string };
 // button will fail with an `SESSION_REQUIRED` error if the session is
 // stale — we surface the error message verbatim.
 export function PasskeyManager() {
+  const translate = useTranslator();
   const [passkeys, setPasskeys] = useState<PasskeyRow[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -29,13 +32,13 @@ export function PasskeyManager() {
     const response = await fetch("/api/auth/passkey/list-user-passkeys", { credentials: "same-origin" });
     if (!response.ok) {
       setIsLoading(false);
-      setError("We couldn't load your passkeys.");
+      setError(translate("auth.passkey.manager.errors.load"));
       return;
     }
     const payload = (await response.json().catch(() => [])) as PasskeyRow[];
     setPasskeys(Array.isArray(payload) ? payload : []);
     setIsLoading(false);
-  }, []);
+  }, [translate]);
 
   useEffect(() => {
     void refresh();
@@ -46,8 +49,8 @@ export function PasskeyManager() {
   if (typeof window !== "undefined" && typeof window.PublicKeyCredential === "undefined") {
     return (
       <section className="flex flex-col gap-2 rounded-md border border-border/60 p-4">
-        <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">Passkeys</h2>
-        <p className="text-xs text-muted-foreground">This browser doesn't support passkeys. Try the latest version of Chrome, Safari, Firefox, or Edge.</p>
+        <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">{translate("auth.passkey.manager.title")}</h2>
+        <p className="text-xs text-muted-foreground">{translate("auth.passkey.manager.unsupported")}</p>
       </section>
     );
   }
@@ -60,7 +63,14 @@ export function PasskeyManager() {
     const { error: apiError } = await authClient.passkey.addPasskey({ name: trimmed || undefined });
     setIsEnrolling(false);
     if (apiError) {
-      setError(apiError.message ?? "We couldn't enroll that passkey.");
+      const typed = apiError as { code?: string; message?: string };
+      setError(
+        localizeAuthError({
+          code: typed.code,
+          translate,
+          fallback: typed.message ?? translate("auth.passkey.manager.errors.enroll"),
+        }),
+      );
       return;
     }
     setNewPasskeyName("");
@@ -78,7 +88,7 @@ export function PasskeyManager() {
     });
     setDeletingId(null);
     if (!response.ok) {
-      setError("We couldn't remove that passkey.");
+      setError(translate("auth.passkey.manager.errors.remove"));
       return;
     }
     await refresh();
@@ -87,14 +97,14 @@ export function PasskeyManager() {
   return (
     <section className="flex flex-col gap-3 rounded-md border border-border/60 p-4">
       <header className="flex flex-col gap-1">
-        <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">Passkeys</h2>
-        <p className="text-xs text-muted-foreground">Sign in without a password by using your device's biometrics or a security key.</p>
+        <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">{translate("auth.passkey.manager.title")}</h2>
+        <p className="text-xs text-muted-foreground">{translate("auth.passkey.manager.subtitle")}</p>
       </header>
 
       {isLoading ? (
-        <p className="text-xs text-muted-foreground">Loading…</p>
+        <p className="text-xs text-muted-foreground">{translate("auth.passkey.manager.loading")}</p>
       ) : passkeys.length === 0 ? (
-        <p className="text-xs text-muted-foreground">No passkeys enrolled yet.</p>
+        <p className="text-xs text-muted-foreground">{translate("auth.passkey.manager.empty")}</p>
       ) : (
         <ul className="flex flex-col gap-2">
           {passkeys.map((pk) => (
@@ -104,7 +114,7 @@ export function PasskeyManager() {
                 <span className="text-muted-foreground">{describePasskey(pk)}</span>
               </div>
               <Button type="button" variant="destructive" size="xs" onClick={() => onDelete(pk.id)} disabled={deletingId === pk.id}>
-                {deletingId === pk.id ? "Removing…" : "Remove"}
+                {deletingId === pk.id ? translate("auth.passkey.manager.remove.loading") : translate("auth.passkey.manager.remove")}
               </Button>
             </li>
           ))}
@@ -113,17 +123,17 @@ export function PasskeyManager() {
 
       <form onSubmit={onEnroll} className="flex flex-col gap-2" noValidate>
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="passkey-name">Name (optional)</Label>
+          <Label htmlFor="passkey-name">{translate("auth.passkey.manager.name.label")}</Label>
           <Input
             id="passkey-name"
-            placeholder="e.g. MacBook Touch ID"
+            placeholder={translate("auth.passkey.manager.name.placeholder")}
             value={newPasskeyName}
             onChange={(event) => setNewPasskeyName(event.target.value)}
             maxLength={64}
           />
         </div>
         <Button type="submit" size="sm" disabled={isEnrolling}>
-          {isEnrolling ? "Waiting for device…" : "Add a passkey"}
+          {isEnrolling ? translate("auth.passkey.manager.enroll.loading") : translate("auth.passkey.manager.enroll")}
         </Button>
       </form>
 

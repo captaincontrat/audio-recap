@@ -9,12 +9,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { type ResetPasswordInput, resetPasswordInputSchema } from "@/lib/auth/schemas";
+import { localizeAuthError } from "@/lib/i18n/auth-errors";
+import { useTranslator } from "@/lib/i18n/provider";
 
 type ResetApiResponse = { ok: true; userId: string } | { ok: false; code: string; message: string };
 
 export function ResetPasswordForm({ tokenPromise }: { tokenPromise: Promise<{ token?: string }> }) {
   const { token } = use(tokenPromise);
   const router = useRouter();
+  const translate = useTranslator();
   const [serverError, setServerError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
   const {
@@ -30,7 +33,7 @@ export function ResetPasswordForm({ tokenPromise }: { tokenPromise: Promise<{ to
   if (!token) {
     return (
       <p className="text-sm text-destructive" role="alert">
-        This reset link is missing its token. Request a new one from the forgot-password page.
+        {translate("auth.resetPassword.missingToken")}
       </p>
     );
   }
@@ -44,11 +47,11 @@ export function ResetPasswordForm({ tokenPromise }: { tokenPromise: Promise<{ to
     });
     const payload = (await response.json().catch(() => null)) as ResetApiResponse | null;
     if (!payload) {
-      setServerError("Unexpected response from the server.");
+      setServerError(translate("common.form.unexpectedServerResponse"));
       return;
     }
     if (!payload.ok) {
-      setServerError(payload.message);
+      setServerError(localizeAuthError({ code: payload.code, translate, fallback: payload.message }));
       return;
     }
     setDone(true);
@@ -58,11 +61,11 @@ export function ResetPasswordForm({ tokenPromise }: { tokenPromise: Promise<{ to
   if (done) {
     return (
       <p className="text-sm" role="status">
-        Your password has been updated. You can now{" "}
+        {translate("auth.resetPassword.success.prefix")}{" "}
         <a href="/sign-in" className="font-medium underline underline-offset-4">
-          sign in
+          {translate("auth.resetPassword.success.link")}
         </a>{" "}
-        with your new password.
+        {translate("auth.resetPassword.success.suffix")}
       </p>
     );
   }
@@ -71,7 +74,7 @@ export function ResetPasswordForm({ tokenPromise }: { tokenPromise: Promise<{ to
     <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4" noValidate>
       <input type="hidden" {...register("token")} />
       <div className="flex flex-col gap-1.5">
-        <Label htmlFor="password">New password</Label>
+        <Label htmlFor="password">{translate("common.newPassword.label")}</Label>
         <Input id="password" type="password" autoComplete="new-password" required {...register("password")} />
         {errors.password ? <p className="text-xs text-destructive">{errors.password.message}</p> : null}
       </div>
@@ -81,7 +84,7 @@ export function ResetPasswordForm({ tokenPromise }: { tokenPromise: Promise<{ to
         </p>
       ) : null}
       <Button type="submit" disabled={isSubmitting}>
-        {isSubmitting ? "Updating…" : "Update password"}
+        {isSubmitting ? translate("auth.resetPassword.submit.loading") : translate("auth.resetPassword.submit")}
       </Button>
     </form>
   );

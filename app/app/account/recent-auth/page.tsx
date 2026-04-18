@@ -3,10 +3,12 @@ import { headers } from "next/headers";
 
 import { RecentAuthPrompt } from "@/components/features/auth/recent-auth-prompt";
 import { getAuth } from "@/lib/auth/instance";
+import { getServerTranslator } from "@/lib/i18n/server";
 
-export const metadata = {
-  title: "Confirm your password",
-};
+export async function generateMetadata() {
+  const { translate } = await getServerTranslator();
+  return { title: translate("auth.recentAuth.title") };
+}
 
 // Landing page for sensitive auth-management actions that failed the
 // `verifyRecentAuth` gate. Confirming the current password refreshes
@@ -22,12 +24,13 @@ export default async function RecentAuthPage({ searchParams }: { searchParams: P
   }
 
   const { from } = await searchParams;
+  const { translate } = await getServerTranslator();
 
   return (
     <main className="mx-auto flex min-h-svh max-w-md flex-col justify-center gap-6 p-6">
       <header className="flex flex-col gap-2">
-        <h1 className="text-2xl font-semibold">Confirm your password</h1>
-        <p className="text-sm text-muted-foreground">Re-enter your password to continue with a sensitive security change.</p>
+        <h1 className="text-2xl font-semibold">{translate("auth.recentAuth.title")}</h1>
+        <p className="text-sm text-muted-foreground">{translate("auth.recentAuth.subtitle")}</p>
       </header>
       <RecentAuthPrompt from={from} />
     </main>

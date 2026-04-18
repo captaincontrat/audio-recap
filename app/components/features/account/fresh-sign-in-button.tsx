@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { useTranslator } from "@/lib/i18n/provider";
 
 // Sign the user out of the current session and bounce them through the
 // primary sign-in flow so the next session is created via a full
@@ -13,6 +14,7 @@ import { Button } from "@/components/ui/button";
 // the user through here forces a new session row with a brand-new
 // `createdAt` and `lastAuthenticatedAt`.
 export function FreshSignInButton({ destination }: { destination: string }) {
+  const translate = useTranslator();
   const router = useRouter();
   const [submitting, setSubmitting] = useState(false);
 
@@ -30,7 +32,7 @@ export function FreshSignInButton({ destination }: { destination: string }) {
 
   return (
     <Button type="button" variant="secondary" onClick={onClick} disabled={submitting}>
-      {submitting ? "Signing out…" : "Sign out and re-verify"}
+      {submitting ? translate("chrome.freshSignInButton.submit.loading") : translate("chrome.freshSignInButton.submit")}
     </Button>
   );
 }
