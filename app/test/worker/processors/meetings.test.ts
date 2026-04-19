@@ -214,6 +214,31 @@ describe("processMeetingJob", () => {
     expect(cleanupAt).toBeLessThan(completedAt);
   });
 
+  test('forwards mediaInputKind: "mp3-derivative" through to processMeetingForWorker so the audio-recap pipeline takes the mp3-derivative branch', async () => {
+    // The MP3-derivative branch was previously unexercised by real
+    // submissions because the browser-side normalization helper
+    // always reported `unavailable`. With Mediabunny landing the
+    // browser will start producing MP3 derivatives and the prepare
+    // endpoint will store `mediaInputKind: "mp3-derivative"` on the
+    // processing job. This test pins down that the worker forwards
+    // that branch verbatim into the shared audio-recap pipeline so
+    // the previously-untested code path runs end-to-end (the audio-
+    // recap library has its own tests confirming the pipeline
+    // handles `mp3-derivative` correctly through `prepare-audio` →
+    // `transcribe` → `build-transcript` → `generate-summary` →
+    // `generateMeetingTitle`).
+    meetingsMock.findProcessingJobByTranscriptId.mockResolvedValue(makeJob({ mediaInputKind: "mp3-derivative", mediaContentType: "audio/mpeg" }));
+
+    const processMeetingJob = await loadProcessor();
+    await processMeetingJob(makeBullJob());
+
+    expect(audioRecapMock.processMeetingForWorker).toHaveBeenCalledTimes(1);
+    const firstCallArgs = audioRecapMock.processMeetingForWorker.mock.calls[0];
+    expect(firstCallArgs?.[1]).toMatchObject({ inputKind: "mp3-derivative" });
+    expect(meetingsMock.markCompleted).toHaveBeenCalledTimes(1);
+    expect(meetingsMock.markFailed).not.toHaveBeenCalled();
+  });
+
   test("downloads notes when a notes key is present", async () => {
     meetingsMock.findProcessingJobByTranscriptId.mockResolvedValue(makeJob({ notesInputKey: "transient-inputs/up_1/notes/meeting.md" }));
 

@@ -36,8 +36,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 
 import { formatBytes } from "./format";
 import { useUploadManagerItems, useUploadManagerStore, useUploadManagerWorkspaceSlug } from "./provider";
+import { isCancellableLocalPhase, isTerminalServerPhase, type LocalSubmissionPhase, type ServerProcessingPhase, type UploadManagerItem } from "./store";
 import { runSubmissionForDraft } from "./submission-runner";
-import { isTerminalServerPhase, type LocalSubmissionPhase, type ServerProcessingPhase, type UploadManagerItem } from "./store";
 
 // Threshold above which the tray header replaces the verbose item
 // stack with a one-line summary. The user can still expand it. The
@@ -218,6 +218,15 @@ function LocalErrorCard({ item }: { item: UploadManagerItem }): React.ReactEleme
 }
 
 function LocalPhaseCard({ item, phase }: { item: UploadManagerItem; phase: Exclude<LocalSubmissionPhase, "draft" | "local_error"> }): React.ReactElement {
+  const store = useUploadManagerStore();
+  const cancellable = isCancellableLocalPhase(phase);
+  const phaseLabel = describeLocalPhase(phase);
+  // For `normalizing`, prefer the determinate Mediabunny progress
+  // when we have it so long video conversions show visible movement
+  // instead of a static spinner. Until the first tick lands we still
+  // show the bar at the phase's coarse value so the layout stays
+  // stable rather than flashing in and out.
+  const progressValue = phase === "normalizing" && item.normalizationProgress !== null ? Math.round(item.normalizationProgress * 100) : localProgressFor(phase);
   return (
     <Card size="sm" data-testid="workspace-shell-upload-item" data-item-id={item.id} data-phase={phase}>
       <CardHeader>
@@ -225,13 +234,27 @@ function LocalPhaseCard({ item, phase }: { item: UploadManagerItem; phase: Exclu
           <p className="truncate text-sm font-medium" title={item.fileName}>
             {item.fileName}
           </p>
-          <PhaseBadge label={describeLocalPhase(phase)} tone="secondary" icon={<Spinner className="size-2.5!" />} />
+          <PhaseBadge label={phaseLabel} tone="secondary" icon={<Spinner className="size-2.5!" />} />
         </div>
         <p className="text-xs text-muted-foreground">{formatBytes(item.fileSize)}</p>
       </CardHeader>
       <CardContent>
-        <Progress value={localProgressFor(phase)} aria-label={`Upload progress: ${describeLocalPhase(phase)}`} />
+        <Progress value={progressValue} aria-label={`Upload progress: ${phaseLabel}`} />
       </CardContent>
+      {cancellable ? (
+        <CardFooter className="justify-end">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => store.cancelInFlight(item.id)}
+            data-testid="workspace-shell-upload-item-cancel-inflight"
+          >
+            <RiCloseLine data-icon="inline-start" />
+            Cancel
+          </Button>
+        </CardFooter>
+      ) : null}
     </Card>
   );
 }
@@ -322,6 +345,8 @@ function describeLocalPhase(phase: LocalSubmissionPhase): string {
   switch (phase) {
     case "draft":
       return "Ready to upload";
+    case "normalizing":
+      return "Converting to MP3…";
     case "preparing":
       return "Preparing…";
     case "uploading":
@@ -364,19 +389,21 @@ function describeServerPhase(phase: ServerProcessingPhase): string {
   }
 }
 
-// Coarse-grained progress for the local submission phases. We do
-// not have byte-level upload progress wired into `submitMeeting()`
-// yet, so the bar advances in three steps tied to the phase
-// callbacks: 25% preparing, 65% uploading, 95% finalizing. Once the
-// item moves to the server phases, the bar is replaced by the
-// stage badge so the "this is now the worker's turn" change is
+// Coarse-grained progress for the local submission phases. Used as a
+// fallback when we do not have a determinate provider tick — for
+// `normalizing`, the live Mediabunny progress (0..1, mapped to a
+// percentage by `LocalPhaseCard`) takes over as soon as it arrives.
+// Once the item moves to the server phases, the bar is replaced by
+// the stage badge so the "this is now the worker's turn" change is
 // visible.
 function localProgressFor(phase: Exclude<LocalSubmissionPhase, "draft" | "local_error">): number {
   switch (phase) {
+    case "normalizing":
+      return 10;
     case "preparing":
-      return 25;
+      return 35;
     case "uploading":
-      return 65;
+      return 70;
     case "finalizing":
       return 95;
     default: {

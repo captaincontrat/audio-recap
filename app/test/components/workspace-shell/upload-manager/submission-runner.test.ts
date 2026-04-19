@@ -1,8 +1,7 @@
-import { describe, expect, test, vi, afterEach, beforeEach } from "vitest";
-
-import { MeetingSubmissionError, type SubmitMeetingResult } from "@/lib/client/meeting-submission";
-import { runSubmissionForDraft } from "@/components/workspace-shell/upload-manager/submission-runner";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { getUploadManagerStore } from "@/components/workspace-shell/upload-manager/store";
+import { runSubmissionForDraft } from "@/components/workspace-shell/upload-manager/submission-runner";
+import { MeetingSubmissionError, type SubmissionPhaseCallbacks, type SubmitMeetingResult } from "@/lib/client/meeting-submission";
 
 const { mockEnsurePolling } = vi.hoisted(() => ({
   mockEnsurePolling: vi.fn(),
@@ -11,6 +10,11 @@ const { mockEnsurePolling } = vi.hoisted(() => ({
 vi.mock("@/components/workspace-shell/upload-manager/polling", () => ({
   getUploadStatusPollingController: () => ({ ensurePolling: mockEnsurePolling, stopAll: vi.fn() }),
 }));
+
+type SubmitInput = {
+  signal?: AbortSignal;
+  callbacks?: SubmissionPhaseCallbacks;
+};
 
 function makeFile(name = "x.mp3"): File {
   return new File(["bytes"], name, { type: "audio/mpeg" });
@@ -25,13 +29,15 @@ afterEach(() => {
   getUploadManagerStore().__resetForTests();
 });
 
-describe("runSubmissionForDraft (tasks 3.3, 5.1 / 7.1)", () => {
-  test("walks the draft through preparing → uploading → finalizing → server queued", async () => {
+describe("runSubmissionForDraft (tasks 3.3, 5.2 / 5.3 / 7.1)", () => {
+  test("walks the draft through normalizing → preparing → uploading → finalizing → server queued", async () => {
     const store = getUploadManagerStore();
     const id = store.addDraft({ workspaceSlug: "riley", file: makeFile() });
     const item = store.findItem(id)!;
     const phaseLog: string[] = [];
-    const submitMeetingFn = vi.fn(async (input: { callbacks?: { onPreparing?: () => void; onUploading?: () => void; onFinalizing?: () => void } }) => {
+    const submitMeetingFn = vi.fn(async (input: SubmitInput) => {
+      input.callbacks?.onNormalizing?.();
+      phaseLog.push(store.findItem(id)?.localPhase ?? "?");
       input.callbacks?.onPreparing?.();
       phaseLog.push(store.findItem(id)?.localPhase ?? "?");
       input.callbacks?.onUploading?.();
@@ -40,7 +46,7 @@ describe("runSubmissionForDraft (tasks 3.3, 5.1 / 7.1)", () => {
       phaseLog.push(store.findItem(id)?.localPhase ?? "?");
       return {
         transcriptId: "tr_done",
-        submission: { uploadId: "u1", resolvedMediaInputKind: "original", mediaNormalizationPolicySnapshot: "optional" },
+        submission: { uploadId: "u1", resolvedMediaInputKind: "mp3-derivative", mediaNormalizationPolicySnapshot: "optional" },
       } satisfies SubmitMeetingResult;
     });
 
@@ -49,11 +55,63 @@ describe("runSubmissionForDraft (tasks 3.3, 5.1 / 7.1)", () => {
     if (result.kind === "submitted") {
       expect(result.transcriptId).toBe("tr_done");
     }
-    expect(phaseLog).toEqual(["preparing", "uploading", "finalizing"]);
+    expect(phaseLog).toEqual(["normalizing", "preparing", "uploading", "finalizing"]);
     const final = store.findItem(id)!;
     expect(final.serverPhase).toBe("queued");
     expect(final.transcriptId).toBe("tr_done");
     expect(mockEnsurePolling).toHaveBeenCalledWith({ workspaceSlug: "riley", transcriptId: "tr_done" });
+  });
+
+  test("registers an AbortController so cancel UI anywhere in the shell can stop the in-flight submission", async () => {
+    const store = getUploadManagerStore();
+    const id = store.addDraft({ workspaceSlug: "riley", file: makeFile() });
+    const item = store.findItem(id)!;
+    // Capture the signal through an object property so TS can see
+    // the closure write across the await boundary (a `let foo:
+    // AbortSignal | null` would narrow back to `null` post-await).
+    const captured: { signal: AbortSignal | null } = { signal: null };
+    const submitMeetingFn = vi.fn(async (input: SubmitInput) => {
+      captured.signal = input.signal ?? null;
+      input.callbacks?.onNormalizing?.();
+      return {
+        transcriptId: "tr_after_signal_check",
+        submission: { uploadId: "u1", resolvedMediaInputKind: "mp3-derivative", mediaNormalizationPolicySnapshot: "optional" },
+      } satisfies SubmitMeetingResult;
+    });
+
+    await runSubmissionForDraft(store, item, { submitMeetingFn });
+
+    expect(captured.signal).not.toBeNull();
+    expect(captured.signal?.aborted).toBe(false);
+  });
+
+  test('user cancel during normalizing aborts cleanly, removes the item from the store, and returns kind: "cancelled"', async () => {
+    const store = getUploadManagerStore();
+    const id = store.addDraft({ workspaceSlug: "riley", file: makeFile() });
+    const item = store.findItem(id)!;
+    const captured: { signal: AbortSignal | null } = { signal: null };
+    const submitMeetingFn = vi.fn(async (input: SubmitInput) => {
+      captured.signal = input.signal ?? null;
+      input.callbacks?.onNormalizing?.();
+      // Wait indefinitely; the only way out is the abort signal that
+      // `cancelInFlight` triggers below.
+      return new Promise<SubmitMeetingResult>((_, reject) => {
+        input.signal?.addEventListener("abort", () => reject(new DOMException("Cancelled", "AbortError")), { once: true });
+      });
+    });
+
+    const runPromise = runSubmissionForDraft(store, item, { submitMeetingFn });
+    // Yield once so the runner reaches `submitMeetingFn` and the
+    // controller is registered in the store before we cancel.
+    await Promise.resolve();
+
+    store.cancelInFlight(id);
+    const result = await runPromise;
+
+    expect(result).toEqual({ kind: "cancelled" });
+    expect(captured.signal?.aborted).toBe(true);
+    expect(store.findItem(id)).toBeNull();
+    expect(mockEnsurePolling).not.toHaveBeenCalled();
   });
 
   test("rejects items that are not in draft phase", async () => {

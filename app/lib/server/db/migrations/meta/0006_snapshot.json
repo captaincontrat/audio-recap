@@ -117,12 +117,8 @@
           "name": "account_user_id_user_id_fk",
           "tableFrom": "account",
           "tableTo": "user",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -207,12 +203,8 @@
           "name": "email_verification_token_user_id_user_id_fk",
           "tableFrom": "email_verification_token",
           "tableTo": "user",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -220,9 +212,7 @@
       "compositePrimaryKeys": {
         "email_verification_token_token_hash_pk": {
           "name": "email_verification_token_token_hash_pk",
-          "columns": [
-            "token_hash"
-          ]
+          "columns": ["token_hash"]
         }
       },
       "uniqueConstraints": {},
@@ -272,12 +262,8 @@
           "name": "password_reset_token_user_id_user_id_fk",
           "tableFrom": "password_reset_token",
           "tableTo": "user",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -285,9 +271,7 @@
       "compositePrimaryKeys": {
         "password_reset_token_token_hash_pk": {
           "name": "password_reset_token_token_hash_pk",
-          "columns": [
-            "token_hash"
-          ]
+          "columns": ["token_hash"]
         }
       },
       "uniqueConstraints": {},
@@ -441,12 +425,8 @@
           "name": "processing_job_transcript_id_transcript_id_fk",
           "tableFrom": "processing_job",
           "tableTo": "transcript",
-          "columnsFrom": [
-            "transcript_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["transcript_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -518,12 +498,8 @@
           "name": "session_user_id_user_id_fk",
           "tableFrom": "session",
           "tableTo": "user",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -533,9 +509,7 @@
         "session_token_unique": {
           "name": "session_token_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "token"
-          ]
+          "columns": ["token"]
         }
       },
       "policies": {},
@@ -836,12 +810,8 @@
           "name": "transcript_workspace_id_workspace_id_fk",
           "tableFrom": "transcript",
           "tableTo": "workspace",
-          "columnsFrom": [
-            "workspace_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["workspace_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -849,12 +819,8 @@
           "name": "transcript_created_by_user_id_user_id_fk",
           "tableFrom": "transcript",
           "tableTo": "user",
-          "columnsFrom": [
-            "created_by_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["created_by_user_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -1114,12 +1080,8 @@
           "name": "workspace_personal_owner_user_id_user_id_fk",
           "tableFrom": "workspace",
           "tableTo": "user",
-          "columnsFrom": [
-            "personal_owner_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["personal_owner_user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1293,12 +1255,8 @@
           "name": "workspace_invitation_workspace_id_workspace_id_fk",
           "tableFrom": "workspace_invitation",
           "tableTo": "workspace",
-          "columnsFrom": [
-            "workspace_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["workspace_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1306,12 +1264,8 @@
           "name": "workspace_invitation_consumed_by_user_id_user_id_fk",
           "tableFrom": "workspace_invitation",
           "tableTo": "user",
-          "columnsFrom": [
-            "consumed_by_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["consumed_by_user_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         },
@@ -1319,12 +1273,8 @@
           "name": "workspace_invitation_invited_by_user_id_user_id_fk",
           "tableFrom": "workspace_invitation",
           "tableTo": "user",
-          "columnsFrom": [
-            "invited_by_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["invited_by_user_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -1449,12 +1399,8 @@
           "name": "workspace_membership_workspace_id_workspace_id_fk",
           "tableFrom": "workspace_membership",
           "tableTo": "workspace",
-          "columnsFrom": [
-            "workspace_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["workspace_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1462,12 +1408,8 @@
           "name": "workspace_membership_user_id_user_id_fk",
           "tableFrom": "workspace_membership",
           "tableTo": "user",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1483,69 +1425,37 @@
     "public.media_normalization_policy_value": {
       "name": "media_normalization_policy_value",
       "schema": "public",
-      "values": [
-        "optional",
-        "required"
-      ]
+      "values": ["optional", "required"]
     },
     "public.transcript_failure_code": {
       "name": "transcript_failure_code",
       "schema": "public",
-      "values": [
-        "validation_failed",
-        "processing_failed"
-      ]
+      "values": ["validation_failed", "processing_failed"]
     },
     "public.transcript_source_media_kind": {
       "name": "transcript_source_media_kind",
       "schema": "public",
-      "values": [
-        "audio",
-        "video"
-      ]
+      "values": ["audio", "video"]
     },
     "public.transcript_status": {
       "name": "transcript_status",
       "schema": "public",
-      "values": [
-        "queued",
-        "preprocessing",
-        "transcribing",
-        "generating_recap",
-        "generating_title",
-        "finalizing",
-        "retrying",
-        "completed",
-        "failed"
-      ]
+      "values": ["queued", "preprocessing", "transcribing", "generating_recap", "generating_title", "finalizing", "retrying", "completed", "failed"]
     },
     "public.workspace_invitation_status": {
       "name": "workspace_invitation_status",
       "schema": "public",
-      "values": [
-        "pending",
-        "accepted",
-        "revoked",
-        "expired",
-        "superseded"
-      ]
+      "values": ["pending", "accepted", "revoked", "expired", "superseded"]
     },
     "public.workspace_role": {
       "name": "workspace_role",
       "schema": "public",
-      "values": [
-        "read_only",
-        "member",
-        "admin"
-      ]
+      "values": ["read_only", "member", "admin"]
     },
     "public.workspace_type": {
       "name": "workspace_type",
       "schema": "public",
-      "values": [
-        "personal",
-        "team"
-      ]
+      "values": ["personal", "team"]
     }
   },
   "schemas": {},

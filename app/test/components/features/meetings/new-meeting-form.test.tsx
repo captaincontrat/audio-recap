@@ -110,7 +110,7 @@ describe("NewMeetingForm (dedicated submission page)", () => {
     expect(typeof opts.errorMessageOverride).toBe("function");
     const overridden = opts.errorMessageOverride!("normalization_required_failed", "fallback");
     expect(overridden).toBe(
-      "This workspace requires browser-side MP3 conversion, which is not available in your browser. Try Chrome or Edge, or ask an admin to relax the policy.",
+      "This workspace requires browser-side MP3 conversion, which did not succeed in your browser. Try Chrome or Edge, or ask an admin to relax the policy.",
     );
     const passthrough = opts.errorMessageOverride!("upload_failed", "fallback for upload failure");
     expect(passthrough).toBe("fallback for upload failure");

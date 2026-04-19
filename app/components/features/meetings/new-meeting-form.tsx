@@ -1,14 +1,15 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, type ChangeEvent, type FormEvent } from "react";
+import { type ChangeEvent, type FormEvent, useCallback, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { formatBytes } from "@/components/workspace-shell/upload-manager/format";
-import { useUploadManagerStore, useUploadManagerWorkspaceSlug } from "@/components/workspace-shell/upload-manager/provider";
+import { useUploadManagerItems, useUploadManagerStore, useUploadManagerWorkspaceSlug } from "@/components/workspace-shell/upload-manager/provider";
+import { isCancellableLocalPhase, type LocalSubmissionPhase } from "@/components/workspace-shell/upload-manager/store";
 import { runSubmissionForDraft } from "@/components/workspace-shell/upload-manager/submission-runner";
 
 type Props = {
@@ -29,15 +30,40 @@ type Props = {
 // existing redirect to the dedicated status page). The shared store
 // still tracks the item in the background so the tray reflects the
 // upload alongside any other in-flight work.
+//
+// Because Mediabunny's MP3 conversion can be materially long-running
+// on large videos, the form mirrors the tray's explicit local-phase
+// surface: we read the in-progress draft's phase + normalization
+// progress straight from the store so the user sees "Converting to
+// MP3…" with a live percentage instead of a vague "Submitting…".
+// The form also exposes a Cancel button while the submission is in
+// a cancellable phase (`normalizing` or `preparing`); cancel calls
+// `store.cancelInFlight(...)`, which the runner translates into a
+// clean removal of the in-flight item rather than a `local_error`
+// row.
 export function NewMeetingForm({ normalizationPolicy }: Props) {
   const router = useRouter();
   const workspaceSlug = useUploadManagerWorkspaceSlug();
   const store = useUploadManagerStore();
+  const items = useUploadManagerItems();
   const [file, setFile] = useState<File | null>(null);
   const [notes, setNotes] = useState("");
   const [phase, setPhase] = useState<"idle" | "submitting" | "done">("idle");
-  const [progressMessage, setProgressMessage] = useState<string | null>(null);
+  const [draftId, setDraftId] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Re-derive the in-flight item from the store on every render so
+  // local-phase transitions and progress ticks bubble into the form's
+  // copy without us forwarding every callback through React state.
+  const inflightItem = draftId ? (items.find((entry) => entry.id === draftId) ?? null) : null;
+  const inflightPhase: LocalSubmissionPhase | null = inflightItem?.localPhase ?? null;
+  const inflightProgress = inflightItem?.normalizationProgress ?? null;
+
+  const cancelInFlight = useCallback(() => {
+    if (draftId) {
+      store.cancelInFlight(draftId);
+    }
+  }, [draftId, store]);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -45,16 +71,16 @@ export function NewMeetingForm({ normalizationPolicy }: Props) {
 
     setErrorMessage(null);
     setPhase("submitting");
-    setProgressMessage("Preparing submission…");
 
-    const draftId = store.addDraft({ workspaceSlug, file });
+    const newDraftId = store.addDraft({ workspaceSlug, file });
+    setDraftId(newDraftId);
     if (notes.trim().length > 0) {
-      store.updateDraftNotes(draftId, notes);
+      store.updateDraftNotes(newDraftId, notes);
     }
-    const draft = store.findItem(draftId);
+    const draft = store.findItem(newDraftId);
     if (!draft) {
       setPhase("idle");
-      setProgressMessage(null);
+      setDraftId(null);
       setErrorMessage("Could not stage the upload. Please retry.");
       return;
     }
@@ -65,11 +91,14 @@ export function NewMeetingForm({ normalizationPolicy }: Props) {
     // tray surfaces the shared, policy-agnostic copy from
     // `describeSubmissionErrorCode`; we just inject the override here
     // so the local-error row in the tray matches what we show under
-    // the form.
+    // the form. The required-policy override is also truthful for
+    // both the unavailable path (browser cannot run the conversion)
+    // and the failed path (browser tried and the conversion failed)
+    // — see `error-messages.ts` for the matching tray copy.
     const result = await runSubmissionForDraft(store, draft, {
       errorMessageOverride: (code, fallback) => {
         if (code === "normalization_required_failed" && normalizationPolicy === "required") {
-          return "This workspace requires browser-side MP3 conversion, which is not available in your browser. Try Chrome or Edge, or ask an admin to relax the policy.";
+          return "This workspace requires browser-side MP3 conversion, which did not succeed in your browser. Try Chrome or Edge, or ask an admin to relax the policy.";
         }
         return fallback;
       },
@@ -78,18 +107,26 @@ export function NewMeetingForm({ normalizationPolicy }: Props) {
     switch (result.kind) {
       case "submitted":
         setPhase("done");
-        setProgressMessage("Submission accepted. Redirecting…");
+        setDraftId(null);
         router.push(`/w/${encodeURIComponent(workspaceSlug)}/meetings/${encodeURIComponent(result.transcriptId)}`);
         return;
       case "failed":
         setPhase("idle");
-        setProgressMessage(null);
+        setDraftId(null);
         setErrorMessage(result.message);
         return;
       case "rejected":
         setPhase("idle");
-        setProgressMessage(null);
+        setDraftId(null);
         setErrorMessage("Could not stage the upload. Please retry.");
+        return;
+      case "cancelled":
+        // The runner already removed the in-flight item from the
+        // store, so the tray returns to a non-error state. We just
+        // reset the form so the user can pick another file or close
+        // the page without a stale "Submitting…" surface.
+        setPhase("idle");
+        setDraftId(null);
         return;
       default: {
         const exhaustive: never = result;
@@ -105,6 +142,16 @@ export function NewMeetingForm({ normalizationPolicy }: Props) {
       setErrorMessage(null);
     }
   }
+
+  const progressMessage = describeProgressMessage(phase, inflightPhase, inflightProgress);
+  const cancellable = inflightPhase !== null && isCancellableLocalPhase(inflightPhase);
+  // The notes textarea stays editable while the submission is in a
+  // cancellable phase (`normalizing` or `preparing`) so the user can
+  // refine context during the now-potentially-long Mediabunny
+  // conversion. Once we cross into `uploading`/`finalizing` the
+  // payload has already left the form, so we lock the field to
+  // signal that further edits won't take effect.
+  const notesLocked = phase === "submitting" && !cancellable && inflightPhase !== null;
 
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-6" noValidate>
@@ -128,7 +175,7 @@ export function NewMeetingForm({ normalizationPolicy }: Props) {
           value={notes}
           onChange={(event) => setNotes(event.target.value)}
           placeholder="Add context the recap should use — attendees, decisions, open questions…"
-          disabled={phase === "submitting"}
+          disabled={notesLocked}
           maxLength={64 * 1024}
         />
         <p className="text-xs text-muted-foreground">Notes are used to improve the recap and are deleted after processing.</p>
@@ -138,7 +185,7 @@ export function NewMeetingForm({ normalizationPolicy }: Props) {
         <p>
           <span className="font-medium text-foreground">Browser-side preparation: </span>
           {normalizationPolicy === "required"
-            ? "This workspace requires browser-side MP3 conversion before queueing. Submissions are rejected if your browser cannot convert the file."
+            ? "This workspace requires browser-side MP3 conversion before queueing. Submissions are rejected if your browser cannot perform the conversion."
             : "This workspace prefers browser-side MP3 conversion when available but accepts original files as a fallback."}
         </p>
       </div>
@@ -149,13 +196,57 @@ export function NewMeetingForm({ normalizationPolicy }: Props) {
         </p>
       ) : null}
 
-      {progressMessage ? <p className="text-sm text-muted-foreground">{progressMessage}</p> : null}
+      {progressMessage ? (
+        <p data-testid="new-meeting-form-progress" className="text-sm text-muted-foreground">
+          {progressMessage}
+        </p>
+      ) : null}
 
-      <div className="flex justify-end">
+      <div className="flex justify-end gap-2">
+        {cancellable ? (
+          <Button type="button" variant="ghost" onClick={cancelInFlight} data-testid="new-meeting-form-cancel">
+            Cancel
+          </Button>
+        ) : null}
         <Button type="submit" disabled={!file || phase === "submitting"}>
           {phase === "submitting" ? "Submitting…" : "Submit for processing"}
         </Button>
       </div>
     </form>
   );
+}
+
+function describeProgressMessage(
+  phase: "idle" | "submitting" | "done",
+  inflightPhase: LocalSubmissionPhase | null,
+  inflightProgress: number | null,
+): string | null {
+  if (phase === "done") {
+    return "Submission accepted. Redirecting…";
+  }
+  if (phase !== "submitting") {
+    return null;
+  }
+  switch (inflightPhase) {
+    case "normalizing":
+      if (inflightProgress !== null) {
+        const percent = Math.round(inflightProgress * 100);
+        return `Converting to MP3 in your browser… (${percent}%)`;
+      }
+      return "Converting to MP3 in your browser…";
+    case "preparing":
+      return "Preparing upload…";
+    case "uploading":
+      return "Uploading…";
+    case "finalizing":
+      return "Finalizing…";
+    case "local_error":
+    case "draft":
+    case null:
+      return "Preparing submission…";
+    default: {
+      const exhaustive: never = inflightPhase;
+      throw new Error(`Unhandled local phase: ${String(exhaustive)}`);
+    }
+  }
 }

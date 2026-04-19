@@ -11,8 +11,7 @@ import type { ExportFormat } from "@/lib/client/transcripts/export/formats";
 // `ExportConversionError` wrapping. The tests keep the real assembly
 // and filename helpers so ordering and sanitization cannot regress,
 // while mocking the four format-specific converters so the branches
-// can be asserted independently of the heavy `remark-pdf` and
-// `remark-docx` runtimes.
+// can be asserted independently of heavier runtime converters.
 const { convertToMarkdownMock, convertToPlainTextMock, convertToPdfMock, convertToDocxMock } = vi.hoisted(() => ({
   convertToMarkdownMock: vi.fn<(markdown: string) => Blob>(),
   convertToPlainTextMock: vi.fn<(tree: unknown) => Blob>(),

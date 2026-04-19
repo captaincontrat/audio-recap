@@ -24,7 +24,7 @@ export async function generateMeetingTitle(client: OpenAI, input: GenerateMeetin
   const response = await client.responses.create({
     model: TITLE_MODEL,
     reasoning: {
-      effort: "minimal",
+      effort: "low",
     },
     max_output_tokens: TITLE_MAX_OUTPUT_TOKENS,
     input: [

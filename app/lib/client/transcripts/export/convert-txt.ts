@@ -1,5 +1,5 @@
 import type { Root } from "mdast";
-import { toString } from "mdast-util-to-string";
+import { toString as toStringUtil } from "mdast-util-to-string";
 
 import { mimeTypeFor } from "./formats";
 
@@ -14,6 +14,6 @@ import { mimeTypeFor } from "./formats";
 // `ExportConversionError` wrapping stays in one place.
 
 export function convertToPlainTextBlob(tree: Root): Blob {
-  const plainText = toString(tree);
+  const plainText = toStringUtil(tree);
   return new Blob([plainText], { type: mimeTypeFor("txt") });
 }

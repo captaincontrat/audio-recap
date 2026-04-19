@@ -3,9 +3,7 @@
 ## Purpose
 
 Defines the first end-to-end product workflow on top of `add-workspace-foundation`, `add-workspace-archival-lifecycle`, and `add-meeting-processing-foundation`: accepting one meeting media submission in the current workspace from a user who has transcript-creation access there — whether from the dedicated submission surface or from the shared workspace shell's workspace-scoped upload entry points — turning it into a durable workspace-owned transcript resource through the shared processing platform, and exposing workspace-scoped post-submit status surfaces (the dedicated transcript status surface and the shared shell's persistent upload manager) so the submitter can follow accepted work through `queued`, `preprocessing`, `transcribing`, `generating_recap`, `generating_title`, `finalizing`, `retrying`, and a terminal `completed` or `failed` outcome. Database-backed `mediaNormalizationPolicy` reads and browser-side MP3 normalization happen before upload handoff, and bounded automatic retries with generic terminal failure summaries are owned here. Durable transcript library/detail browsing, editing, sharing, curation, and export are explicitly out of scope and belong to downstream capabilities such as `add-transcript-management`.
-
 ## Requirements
-
 ### Requirement: Verified authenticated users with transcript-creation access can submit one meeting media file with optional notes in the current workspace
 The system SHALL allow a verified authenticated user to submit exactly one audio or video file for processing in the current workspace when that user has transcript-creation access there. Submission MAY begin from the dedicated workspace submission surface or from the shared workspace shell's workspace-scoped upload entry points, which include the global drag-and-drop affordance and the explicit header upload control. For workspace-scoped private submission and status surfaces, the current workspace SHALL be resolved from the explicit workspace route context defined by `add-workspace-foundation`, and session or remembered workspace state MUST NOT override that explicit route context. The submission flow SHALL also allow optional meeting notes captured at submission time as plain text or markdown text. When submission begins from any shell-level upload entry point, the system MUST associate the file with the current workspace, MUST present a confirmation handoff before upload starts, MUST allow optional notes capture in that handoff, and MUST NOT upload or queue transcript work until the user explicitly confirms. `add-workspace-archival-lifecycle` owns the rule that archived workspaces are inactive for collaboration, and this submission surface MUST honor that active-workspace requirement. The system MUST reject unauthenticated or unverified requests, MUST reject submissions from users who do not have transcript-creation access in the current workspace, MUST reject submissions whose media cannot be validated as supported audio/video input, and MUST reject submissions that exceed configured upload limits before enqueueing background work.
 
@@ -53,7 +51,7 @@ The system SHALL store a Postgres-backed `mediaNormalizationPolicy` setting with
 - **THEN** the submission flow requires successful browser-side normalization before queueing and does not allow fallback to the original file
 
 ### Requirement: The submission flow applies the current normalization policy before upload handoff
-The submission flow SHALL use browser-side normalization before upload handoff. For audio file selections, the browser SHALL try to convert the selected audio into MP3. For video file selections, the browser SHALL try to extract the primary audio track and convert that extracted audio into MP3. If the current normalization policy is `optional`, the system SHALL still allow upload of the original validated file when local normalization is unavailable, unsupported for the selected file, or fails. If the current normalization policy is `required`, the system SHALL reject the submission before queueing when local normalization is unavailable, unsupported for the selected file, or fails. Raw video upload MUST remain supported as a fallback path only while the current policy is `optional`.
+The submission flow SHALL use browser-side normalization before upload handoff. For audio file selections, the browser SHALL try to convert the selected audio into MP3. For video file selections, the browser SHALL try to extract the primary audio track and convert that extracted audio into MP3. If the current normalization policy is `optional`, the system SHALL still allow upload of the original validated file when local normalization is unavailable, unsupported for the selected file, or fails. If the current normalization policy is `required`, the system SHALL reject the submission before queueing when local normalization is unavailable, unsupported for the selected file, or fails. Raw video upload MUST remain supported as a fallback path only while the current policy is `optional`. The submission flow SHALL genuinely attempt browser-side MP3 conversion on browsers that support it rather than reporting normalization as unavailable without attempting it. While browser-side normalization is in progress, the client SHALL expose an explicit local normalization state distinct from the later server-side transcript-processing lifecycle, SHALL show conversion progress when the browser runtime provides it, and SHALL keep the submission UI responsive. User-initiated cancellation before upload starts MUST abort the local conversion attempt, MUST NOT upload either the original or derivative file, MUST NOT create queued transcript work, and MUST NOT be presented to the user as a failed submission.
 
 #### Scenario: Audio normalization succeeds before upload
 - **WHEN** a verified authenticated user selects a supported audio file and browser-side MP3 conversion succeeds
@@ -70,6 +68,22 @@ The submission flow SHALL use browser-side normalization before upload handoff. 
 #### Scenario: Required mode rejects failed normalization
 - **WHEN** browser-side normalization is unavailable, unsupported for the selected media, or fails while the current policy is `required`
 - **THEN** the system rejects the submission before queueing and does not upload the original file as a fallback
+
+#### Scenario: Browser-side normalization is genuinely attempted on supported browsers
+- **WHEN** a verified authenticated user selects a supported audio or video file in a browser that can run browser-side MP3 normalization
+- **THEN** the submission flow actually performs the conversion attempt before upload and reports `succeeded` or `failed` based on the real outcome rather than reporting `unavailable` without attempting conversion
+
+#### Scenario: Browser-side normalization is surfaced explicitly while it runs
+- **WHEN** browser-side normalization takes long enough to be user-visible during a submission
+- **THEN** the submission UI shows that local normalization is in progress and surfaces conversion progress when the browser runtime provides it instead of only showing a generic preparation state
+
+#### Scenario: User cancels browser-side normalization before upload starts
+- **WHEN** a user cancels the submission while browser-side normalization is still in progress and before the upload begins
+- **THEN** the system aborts the local conversion attempt, does not upload a file, does not create queued transcript work, and returns the submission surface to a non-error state
+
+#### Scenario: Submission UI stays responsive while normalization runs
+- **WHEN** browser-side normalization is in progress for a selected file during a submission
+- **THEN** the dedicated submission form and the shared workspace shell upload manager remain interactive (the user can still navigate, scroll, edit notes, and cancel) while the conversion completes
 
 ### Requirement: Meeting processing runs asynchronously with visible status stages through a narrow post-submit status surface
 The system SHALL process accepted submissions asynchronously rather than inside the upload request. Each transcript record SHALL expose a user-visible processing status that reflects the current lifecycle stage through workspace-scoped private follow-up surfaces tied to that transcript's current workspace, including the dedicated transcript status surface and the shared shell's persistent upload manager. This requirement covers only the post-submit status behavior needed to follow accepted work and does not define the durable transcript library/detail read contract, which is owned by `add-transcript-management`. `add-workspace-archival-lifecycle` owns the rule that archived workspaces are inactive for collaboration, and these private follow-up surfaces MUST honor that active-workspace requirement. The status model MUST support `queued`, `preprocessing`, `transcribing`, `generating_recap`, `generating_title`, `finalizing`, `retrying`, `completed`, and `failed`.
@@ -131,3 +145,4 @@ The system SHALL automatically retry retryable infrastructure or provider failur
 #### Scenario: Validation failure is non-retryable
 - **WHEN** processing fails because the submission cannot be validated as usable meeting media
 - **THEN** the system fails the transcript without automatic retry
+

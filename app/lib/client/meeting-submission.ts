@@ -14,7 +14,7 @@ import { normalizeMediaForSubmission } from "./media-normalization";
 // a user-renderable message) or unexpected failures that callers should
 // display as generic errors.
 
-const MAX_MEDIA_BYTES = 500 * 1024 * 1024;
+const MAX_MEDIA_BYTES = 2000 * 1024 * 1024; // 2GB
 const MAX_NOTES_BYTES = 64 * 1024;
 
 export type PreparePresignedPut = {
@@ -63,11 +63,15 @@ export class MeetingSubmissionError extends Error {
 }
 
 // Optional progress callbacks the upload manager wires up so the tray
-// can show "preparing", "uploading", or "finalizing" as the helper
-// walks through each step. The dedicated meeting form ignores them
-// — it only cares about the final outcome — but the manager surfaces
-// them as the per-item local submission phase.
+// can show "normalizing", "preparing", "uploading", or "finalizing"
+// as the helper walks through each step, and so the conversion
+// progress stream from Mediabunny can drive a determinate progress
+// bar on long-running encodes. The dedicated meeting form wires the
+// same callbacks so it can render the same explicit local phases
+// instead of a single opaque "Submitting…" state.
 export type SubmissionPhaseCallbacks = {
+  onNormalizing?: () => void;
+  onNormalizationProgress?: (progress: number) => void;
   onPreparing?: () => void;
   onUploading?: () => void;
   onFinalizing?: () => void;
@@ -78,6 +82,13 @@ export type SubmitMeetingInputs = {
   file: File;
   notesText?: string;
   callbacks?: SubmissionPhaseCallbacks;
+  // Optional caller-controlled abort. When the signal fires before
+  // upload starts, the in-flight Mediabunny conversion is cancelled
+  // (freeing its encoder Worker) and `submitMeeting()` rejects with
+  // an `AbortError`-shaped `DOMException`. Callers (the dedicated
+  // form, the upload-manager runner) treat that as a deliberate
+  // cancel rather than a submission failure.
+  signal?: AbortSignal;
 };
 
 export type SubmitMeetingResult = {
@@ -103,11 +114,26 @@ export async function submitMeeting(inputs: SubmitMeetingInputs): Promise<Submit
     throw new MeetingSubmissionError("media_unsupported", "Only audio or video files are supported.");
   }
 
-  inputs.callbacks?.onPreparing?.();
+  if (inputs.signal?.aborted) {
+    throw new DOMException("Submission cancelled", "AbortError");
+  }
 
-  const normalization = await normalizeMediaForSubmission({ file: inputs.file, kind: mediaKind });
+  inputs.callbacks?.onNormalizing?.();
+
+  const normalization = await normalizeMediaForSubmission({
+    file: inputs.file,
+    kind: mediaKind,
+    ...(inputs.signal ? { signal: inputs.signal } : {}),
+    ...(inputs.callbacks?.onNormalizationProgress ? { onProgress: inputs.callbacks.onNormalizationProgress } : {}),
+  });
   const uploadFile = normalization.file;
   const uploadContentType = uploadFile.type || inputs.file.type;
+
+  if (inputs.signal?.aborted) {
+    throw new DOMException("Submission cancelled", "AbortError");
+  }
+
+  inputs.callbacks?.onPreparing?.();
 
   const prepare = await postJson<PrepareResponse>(`/api/workspaces/${encodeURIComponent(inputs.workspaceSlug)}/meetings/prepare`, {
     sourceMediaKind: mediaKind,
@@ -122,7 +148,9 @@ export async function submitMeeting(inputs: SubmitMeetingInputs): Promise<Submit
 
   await uploadToPresignedUrl(prepare.uploads.media, uploadFile);
   if (prepare.uploads.notes && notes) {
-    const notesBlob = new Blob([notes], { type: "text/markdown; charset=utf-8" });
+    const notesBlob = new Blob([notes], {
+      type: "text/markdown; charset=utf-8",
+    });
     await uploadToPresignedUrl(prepare.uploads.notes, notesBlob);
   }
 
@@ -154,7 +182,11 @@ async function postJson<T>(url: string, body: unknown): Promise<T> {
     credentials: "same-origin",
     body: JSON.stringify(body),
   });
-  const payload = (await response.json().catch(() => null)) as { ok: boolean; code?: string; message?: string } | null;
+  const payload = (await response.json().catch(() => null)) as {
+    ok: boolean;
+    code?: string;
+    message?: string;
+  } | null;
   if (!payload || typeof payload !== "object") {
     throw new MeetingSubmissionError("unexpected_response", "Unexpected response from the server.");
   }

@@ -30,7 +30,12 @@ export function describeSubmissionErrorCode(code: string, fallback: string): str
     case "empty_file":
       return "The upload did not complete. Please retry.";
     case "normalization_required_failed":
-      return "Browser-side conversion did not run. Try Chrome or Edge, or ask an admin to relax the policy.";
+      // Phrased to stay truthful for both code paths on supported
+      // browsers: the conversion did not run at all (`unavailable`)
+      // and the conversion ran and failed for this file (`failed`).
+      // The dedicated form layers a policy-aware override on top
+      // when the workspace has flipped to `required` mode.
+      return "Browser-side MP3 conversion did not succeed. Try Chrome or Edge, or ask an admin to relax the policy.";
     case "plan_token_expired":
       return "The upload session expired. Please start again.";
     case "plan_token_invalid_signature":

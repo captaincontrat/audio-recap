@@ -77,7 +77,7 @@ describe("generateMeetingTitle", () => {
     expect(create).toHaveBeenCalledWith(
       expect.objectContaining({
         model: "gpt-5.4",
-        reasoning: { effort: "minimal" },
+        reasoning: { effort: "low" },
         input: [
           {
             role: "developer",
@@ -90,7 +90,11 @@ describe("generateMeetingTitle", () => {
         ],
       }),
     );
-    const userPrompt = (create.mock.calls[0] as Array<{ input: Array<{ role: string; content: string }> }>)[0].input[1].content;
+    const userPrompt = (
+      create.mock.calls[0] as Array<{
+        input: Array<{ role: string; content: string }>;
+      }>
+    )[0].input[1].content;
     expect(userPrompt).toContain("Kickoff");
     expect(userPrompt).toContain("Budget review");
   });
@@ -110,8 +114,16 @@ describe("generateMeetingTitle", () => {
     );
 
     expect(title).toBe("Team sync");
-    const developerPrompt = (create.mock.calls[0] as Array<{ input: Array<{ role: string; content: string }> }>)[0].input[0].content;
-    const userPrompt = (create.mock.calls[0] as Array<{ input: Array<{ role: string; content: string }> }>)[0].input[1].content;
+    const developerPrompt = (
+      create.mock.calls[0] as Array<{
+        input: Array<{ role: string; content: string }>;
+      }>
+    )[0].input[0].content;
+    const userPrompt = (
+      create.mock.calls[0] as Array<{
+        input: Array<{ role: string; content: string }>;
+      }>
+    )[0].input[1].content;
     expect(developerPrompt).toContain("dominant language of the provided material");
     expect(userPrompt).toContain("No summary available.");
     expect(userPrompt).toContain("Informal catch-up notes only");

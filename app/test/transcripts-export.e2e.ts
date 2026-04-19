@@ -10,8 +10,8 @@ import { seedTranscripts } from "./e2e/transcripts-helpers";
 // refused in archived workspaces; public share pages must not expose
 // export controls at all. The client-side conversion (md / txt / pdf
 // / docx) happens in the browser, so the happy-path tests trigger an
-// actual download and inspect the file produced by the live remark
-// pipelines.
+// actual download and inspect the file produced by the live browser
+// conversion pipelines.
 
 test.describe.configure({ mode: "serial" });
 
@@ -164,8 +164,8 @@ test("pdf download emits a PDF file with the title-derived filename", async ({ p
   expect(download.suggestedFilename()).toBe(`${COMPLETED_FIXTURE.customTitle}.pdf`);
   const bytes = await readDownloadBytes(download);
   // Every PDF starts with the `%PDF-` magic bytes; asserting on them
-  // is the most stable cross-viewer proof that the client-side
-  // `remark-pdf` compiler actually produced a PDF.
+  // is the most stable cross-viewer proof that the browser-side PDF
+  // conversion actually produced a PDF.
   expect(bytes.slice(0, 5).toString("ascii")).toBe("%PDF-");
 });
 

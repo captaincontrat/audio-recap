@@ -18,7 +18,7 @@ import {
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem, useSidebar } from "@/components/ui/sidebar";
 import { useTranslator } from "@/lib/i18n/provider";
 
-import { type WorkspaceShellUser } from "./workspace-context";
+import type { WorkspaceShellUser } from "./workspace-context";
 
 // Sidebar footer user menu, adapted from `sidebar-16` per the design
 // (`add-workspace-app-shell`): replace `IconPlaceholder` with remix
@@ -63,7 +63,6 @@ export function NavUser({ user }: { user: WorkspaceShellUser }) {
           <DropdownMenuTrigger asChild>
             <SidebarMenuButton
               size="lg"
-              tooltip={displayName}
               data-testid="workspace-shell-user-menu-trigger"
               className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
             >

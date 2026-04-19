@@ -5,9 +5,13 @@
 // they survive cross-workspace navigation that re-mounts the
 // per-slug shell layout. Each item carries two layers of state per
 // the design:
-//   - local submission phase: `draft`, `preparing`, `uploading`,
-//     `finalizing`, `local_error`. The `draft` phase is the
-//     drop-then-confirm handoff itself.
+//   - local submission phase: `draft`, `normalizing`, `preparing`,
+//     `uploading`, `finalizing`, `local_error`. The `draft` phase
+//     is the drop-then-confirm handoff itself; `normalizing` is the
+//     browser-side Mediabunny conversion to MP3 (potentially
+//     long-running on large videos), and `preparing` covers the
+//     short post-conversion `prepare` request that signs upload
+//     URLs.
 //   - server transcript-processing phase: `queued`, `preprocessing`,
 //     `transcribing`, `generating_recap`, `generating_title`,
 //     `finalizing`, `retrying`, `completed`, `failed`.
@@ -24,7 +28,18 @@
 // workspace, even though items for other workspaces remain in the
 // singleton.
 
-export type LocalSubmissionPhase = "draft" | "preparing" | "uploading" | "finalizing" | "local_error";
+export type LocalSubmissionPhase = "draft" | "normalizing" | "preparing" | "uploading" | "finalizing" | "local_error";
+
+// Local phases during which the user may still cancel the
+// submission before any bytes leave the browser. Once the upload
+// (`uploading`) starts, the cancel affordance is removed per the
+// design — the conversion has already produced an MP3 and the
+// presigned PUT is already in flight.
+export const CANCELLABLE_LOCAL_PHASES: ReadonlySet<LocalSubmissionPhase> = new Set<LocalSubmissionPhase>(["normalizing", "preparing"]);
+
+export function isCancellableLocalPhase(phase: LocalSubmissionPhase): boolean {
+  return CANCELLABLE_LOCAL_PHASES.has(phase);
+}
 
 export type ServerProcessingPhase =
   | "queued"
@@ -61,6 +76,12 @@ export type UploadManagerItem = {
   transcriptId: string | null;
   localPhase: LocalSubmissionPhase | null;
   serverPhase: ServerProcessingPhase | null;
+  // Determinate progress (`[0, 1]`) for the `normalizing` local phase
+  // when Mediabunny emits it. `null` means "no progress reported yet"
+  // — the tray and the dedicated form fall back to indeterminate
+  // copy ("Converting to MP3…") in that case rather than hiding the
+  // phase entirely. Resets to `null` when the phase advances.
+  normalizationProgress: number | null;
   errorCode: string | null;
   errorMessage: string | null;
   title: string | null;
@@ -92,6 +113,16 @@ class UploadManagerStore {
   private workspaces = new Map<string, WorkspaceState>();
   private listeners = new Map<string, Set<Listener>>();
   private readonly globalListeners = new Set<Listener>();
+  // Per-item AbortController held only while a submission is
+  // mid-flight. The submission runner registers the controller before
+  // calling `submitMeeting()`, the tray and the dedicated form trigger
+  // `cancelInFlight(id)` when the user clicks Cancel during a
+  // cancellable local phase, and the runner clears the entry on
+  // success/failure. Holding the controller in the store (rather than
+  // in a per-item React ref) lets the cancel UI live anywhere — the
+  // tray, the dedicated form's footer button, future shortcuts —
+  // without re-plumbing a callback through every consumer.
+  private inFlightAborts = new Map<string, AbortController>();
   private idCounter = 0;
 
   subscribe(workspaceSlug: string, listener: Listener): () => void {
@@ -138,6 +169,7 @@ class UploadManagerStore {
       transcriptId: null,
       localPhase: "draft",
       serverPhase: null,
+      normalizationProgress: null,
       errorCode: null,
       errorMessage: null,
       title: null,
@@ -170,16 +202,21 @@ class UploadManagerStore {
 
   // Mark a draft as having begun submission. The next phase
   // transitions are owned by the submission orchestrator that calls
-  // `submitMeeting()` — it walks `preparing` → `uploading` →
-  // `finalizing` and finally moves the item onto the server phase
-  // once a transcript id exists.
+  // `submitMeeting()` — it walks `normalizing` → `preparing` →
+  // `uploading` → `finalizing` and finally moves the item onto the
+  // server phase once a transcript id exists. We initialize at
+  // `normalizing` because the runner immediately fires
+  // `onNormalizing` as the first phase callback; setting it eagerly
+  // here also guarantees the tray never shows a "between phases"
+  // gap even if the very first microtask hasn't run yet.
   beginSubmission(id: string): UploadManagerItem | null {
     let result: UploadManagerItem | null = null;
     this.patchItem(id, (item) => {
       if (item.localPhase !== "draft") return item;
       const next: UploadManagerItem = {
         ...item,
-        localPhase: "preparing",
+        localPhase: "normalizing",
+        normalizationProgress: null,
         errorCode: null,
         errorMessage: null,
         updatedAt: Date.now(),
@@ -193,7 +230,28 @@ class UploadManagerStore {
   setLocalPhase(id: string, phase: LocalSubmissionPhase): void {
     this.patchItem(id, (item) => {
       if (item.serverPhase !== null) return item;
-      return { ...item, localPhase: phase, updatedAt: Date.now() };
+      // Reset the normalization progress when leaving the
+      // `normalizing` phase so a stale `0.42` does not bleed into
+      // the next phase's UI; we keep it intact while we're still in
+      // `normalizing` so `setNormalizationProgress` can replace it.
+      const normalizationProgress = phase === "normalizing" ? item.normalizationProgress : null;
+      return { ...item, localPhase: phase, normalizationProgress, updatedAt: Date.now() };
+    });
+  }
+
+  // Update the determinate progress reported by Mediabunny for the
+  // `normalizing` phase. Silently no-ops outside that phase so a
+  // late progress tick fired right before a phase advance cannot
+  // resurrect a stale bar.
+  setNormalizationProgress(id: string, progress: number): void {
+    this.patchItem(id, (item) => {
+      if (item.localPhase !== "normalizing") return item;
+      // Clamp into [0, 1] defensively. Mediabunny's docs say the
+      // value is in this range, but we never want a buggy provider
+      // tick to push the bar past 100% or below 0%.
+      const clamped = progress < 0 ? 0 : progress > 1 ? 1 : progress;
+      if (item.normalizationProgress === clamped) return item;
+      return { ...item, normalizationProgress: clamped, updatedAt: Date.now() };
     });
   }
 
@@ -203,9 +261,46 @@ class UploadManagerStore {
       localPhase: "local_error",
       errorCode,
       errorMessage,
+      normalizationProgress: null,
       file: null,
       updatedAt: Date.now(),
     }));
+  }
+
+  // Register the AbortController owned by the submission runner so
+  // any cancel affordance (tray Cancel button, dedicated form Cancel
+  // button, future shortcuts) can abort the in-flight submission
+  // without holding a direct reference to the runner.
+  registerInFlightAbort(id: string, controller: AbortController): void {
+    this.inFlightAborts.set(id, controller);
+  }
+
+  // Drop the registered controller without aborting it. Called by
+  // the runner on success and on non-cancel failure paths so we do
+  // not leak controllers across submissions.
+  clearInFlightAbort(id: string): void {
+    this.inFlightAborts.delete(id);
+  }
+
+  // Trigger the registered controller's `abort()`. Safe to call when
+  // no controller is registered (e.g. the user clicked Cancel after
+  // the runner already finished). Does NOT remove the item — the
+  // runner's catch path is responsible for store cleanup so error
+  // and cancellation outcomes flow through one place.
+  cancelInFlight(id: string): void {
+    const controller = this.inFlightAborts.get(id);
+    if (controller) {
+      controller.abort();
+    }
+  }
+
+  // Drop a cancelled item from the tray entirely so the UI returns
+  // to a non-error state (no `local_error` row, no failure copy).
+  // The runner calls this only after a confirmed `AbortError` —
+  // every other failure path goes through `setLocalError`.
+  removeCancelledItem(id: string): void {
+    this.inFlightAborts.delete(id);
+    this.removeItem(id);
   }
 
   // Move an item from local-phase tracking to server-phase tracking
@@ -218,6 +313,7 @@ class UploadManagerStore {
       transcriptId,
       localPhase: null,
       serverPhase: initialServerPhase,
+      normalizationProgress: null,
       file: null,
       errorCode: null,
       errorMessage: null,
@@ -236,6 +332,7 @@ class UploadManagerStore {
         ...item,
         serverPhase: update.phase,
         localPhase: null,
+        normalizationProgress: null,
         title: update.title ?? item.title,
         failureSummary: update.failureSummary,
         updatedAt: Date.now(),
@@ -299,6 +396,7 @@ class UploadManagerStore {
         transcriptId: incoming.id,
         localPhase: null,
         serverPhase: incoming.status,
+        normalizationProgress: null,
         errorCode: null,
         errorMessage: null,
         title: incoming.title,
@@ -328,6 +426,7 @@ class UploadManagerStore {
     this.workspaces.clear();
     this.listeners.clear();
     this.globalListeners.clear();
+    this.inFlightAborts.clear();
     this.idCounter = 0;
   }
 

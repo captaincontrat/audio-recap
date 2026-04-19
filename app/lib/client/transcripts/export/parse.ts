@@ -11,8 +11,8 @@ import { unified } from "unified";
 // etc.).
 //
 // `parseExportMarkdown` returns the parsed `mdast` tree ready for
-// downstream conversion (`mdast-util-to-string` for `txt`, `remark-pdf`
-// and `remark-docx` for binary formats).
+// downstream conversion (`mdast-util-to-string` for `txt` and other
+// format-specific compilers such as the DOCX pipeline).
 
 export function parseExportMarkdown(markdown: string): Root {
   const processor = unified().use(remarkParse).use(remarkGfm);

@@ -50,7 +50,12 @@ type AbortReason = "missing_transcript" | "missing_job" | "already_terminal";
 //      BullMQ when retry is warranted.
 export async function processMeetingJob(job: Job<MeetingJobPayload>): Promise<void> {
   const log = jobLogger(
-    { queue: QUEUE_NAMES.meetings, jobName: job.name, jobId: job.id, attempt: job.attemptsMade + 1 },
+    {
+      queue: QUEUE_NAMES.meetings,
+      jobName: job.name,
+      jobId: job.id,
+      attempt: job.attemptsMade + 1,
+    },
     { transcriptId: job.data.transcriptId },
   );
 
@@ -124,7 +129,12 @@ export async function processMeetingJob(job: Job<MeetingJobPayload>): Promise<vo
       originalDurationSec,
     });
 
-    await cleanupTransient({ mediaKey, notesKey, transcriptId: job.data.transcriptId, log });
+    await cleanupTransient({
+      mediaKey,
+      notesKey,
+      transcriptId: job.data.transcriptId,
+      log,
+    });
     await markCompleted(job.data.transcriptId);
     log.info({ attempt: attemptNumber }, "transcript published as completed");
   } catch (err) {
@@ -142,7 +152,10 @@ export async function processMeetingJob(job: Job<MeetingJobPayload>): Promise<vo
     if (retry.kind === "retry") {
       const failureSummary = defaultFailureSummary("processing_failed");
       log.warn({ err, attempt: attemptNumber, nextAttempt: retry.nextAttempt }, "worker failure classified as retryable");
-      await recordRetryingFailure(job.data.transcriptId, { failureCode: "processing_failed", failureSummary });
+      await recordRetryingFailure(job.data.transcriptId, {
+        failureCode: "processing_failed",
+        failureSummary,
+      });
       await getQueue(QUEUE_NAMES.meetings).add(MEETING_JOB_NAME, job.data, {
         delay: QUEUE_RETRY_DELAY_MS,
         attempts: 1,
