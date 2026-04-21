@@ -31,12 +31,12 @@ describe("buildDurationRatio", () => {
   });
 
   it("falls back to the speed multiplier when durations are not observable", () => {
-    expect(buildDurationRatio({ preparedDurationSec: 60, speedMultiplier: 2 })).toEqual({
-      value: 2,
+    expect(buildDurationRatio({ preparedDurationSec: 60, speedMultiplier: 1.5 })).toEqual({
+      value: 1.5,
       source: "speed-multiplier",
     });
-    expect(buildDurationRatio({ originalDurationSec: 0, speedMultiplier: 2 })).toEqual({
-      value: 2,
+    expect(buildDurationRatio({ originalDurationSec: 0, speedMultiplier: 1.5 })).toEqual({
+      value: 1.5,
       source: "speed-multiplier",
     });
   });

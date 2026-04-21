@@ -48,15 +48,35 @@ pnpm process:meeting \
   --out-dir "./out"
 ```
 
+Avec formats de CR personnalisés:
+
+```bash
+pnpm process:meeting \
+  --audio "./client-call.m4a" \
+  --summary-formats '{"formats":[{"key":"client","matchDescription":"Client-facing follow-up with validations, objections, commitments, or delivery expectations.","template":"# [Meeting title]\n## Client recap\n## Decisions and validations\n## Commitments\n## Risks and watchouts\n## Next contact"},{"key":"upsell-accounting-client","matchDescription":"Commercial follow-up focused on upsell opportunities with an accounting client.","template":"# [Meeting title]\n## Commercial context\n## Upsell signals\n## Objections\n## Proposal strategy\n## Next actions"}]}' \
+  --out-dir "./out"
+```
+
 Options:
 
 - `--audio`: chemin vers le fichier audio source.
 - `--notes`: chemin facultatif vers les notes du meeting.
 - `--out-dir`: dossier de sortie pour `transcript.md` et `summary.md`.
 - `--language`: indice facultatif de langue pour la transcription et le résumé.
+- `--summary-formats`: chaîne JSON facultative pour remplacer un format intégré ou ajouter des types de réunion custom.
 - `--keep-temp`: conserve les artefacts intermédiaires `ffmpeg`.
 
 Quand `--notes` est omis, le résumé est généré uniquement à partir du transcript diarizé. Le résultat reste utile, mais peut être moins bien structuré ou moins contextualisé qu'avec de vraies notes de réunion.
+
+Formats intégrés:
+
+- `project`
+- `client`
+- `codir`
+- `brainstorming`
+- `general`
+
+Le moteur compare les notes et le transcript au catalogue disponible, choisit le meilleur match, puis retombe sur `general` si aucun type spécialisé n'est suffisamment convaincant.
 
 ## Pipeline
 

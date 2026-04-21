@@ -2,6 +2,7 @@ import type OpenAI from "openai";
 
 import { DEFAULT_CHUNK_OVERLAP_SEC, type PreparedAudioFile, prepareAudioForUpload } from "../audio/ffmpeg.js";
 import { buildTranscriptArtifacts, type TranscriptArtifacts } from "../domain/transcript.js";
+import { resolveSummaryFormatCatalog } from "../openai/summary-formats.js";
 import { generateMeetingSummary } from "../openai/summarize.js";
 import { type TranscriptionResult, transcribePreparedAudio } from "../openai/transcribe.js";
 
@@ -14,6 +15,7 @@ export interface MeetingProcessingInput {
   meetingNotes?: string;
   notesPath?: string;
   outputLanguage?: string;
+  summaryFormats?: string;
   overlapSec?: number;
 }
 
@@ -35,6 +37,10 @@ export async function runMeetingPipeline(client: OpenAI, input: MeetingProcessin
   const overlapSec = input.overlapSec ?? DEFAULT_CHUNK_OVERLAP_SEC;
   const notifyStage = hooks.onStage ?? (() => {});
 
+  if (input.summaryFormats) {
+    resolveSummaryFormatCatalog(input.summaryFormats);
+  }
+
   notifyStage("prepare-audio", { inputKind: input.inputKind, audioPath: input.audioPath });
   const preparedAudio = await prepareAudioForUpload(input.audioPath, input.tempDir, {
     overlapSec,
@@ -55,6 +61,7 @@ export async function runMeetingPipeline(client: OpenAI, input: MeetingProcessin
     meetingNotes: input.meetingNotes ?? "",
     transcriptBlocks: transcriptArtifacts.blocks,
     ...(input.outputLanguage ? { outputLanguage: input.outputLanguage } : {}),
+    ...(input.summaryFormats ? { summaryFormats: input.summaryFormats } : {}),
   });
 
   return {

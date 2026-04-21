@@ -10,16 +10,16 @@ import {
 
 const preparedAudio: PreparedAudioFile = {
   sourcePath: "/tmp/meeting.m4a",
-  preparedPath: "/tmp/prepared-x2.mp3",
+  preparedPath: "/tmp/prepared-x1.5.mp3",
   durationSec: 120,
   sizeBytes: 4096,
   formatName: "mp3",
-  speedMultiplier: 2,
+  speedMultiplier: 1.5,
   overlapSec: 1,
   chunks: [
     {
       index: 0,
-      path: "/tmp/prepared-x2.mp3",
+      path: "/tmp/prepared-x1.5.mp3",
       startSec: 0,
       durationSec: 120,
       sizeBytes: 4096,
@@ -50,6 +50,7 @@ describe("markdown rendering", () => {
 
     expect(markdown).toContain("# Transcript du meeting");
     expect(markdown).toContain("- Notes source: `/notes/meeting.md`");
+    expect(markdown).toContain("- Prétraitement audio: vitesse `x1.5`, format `mp3`");
     expect(markdown).toContain("### 00:00:00 - 00:00:12 · Alice");
     expect(markdown).toContain("Bonjour tout le monde.");
     expect(markdown.endsWith("\n")).toBe(true);
@@ -117,7 +118,7 @@ describe("markdown rendering", () => {
     const markdown = renderPrivacySafeTranscriptMarkdown({
       generatedAt: "2026-04-14T10:00:00.000Z",
       preparedAudio: {
-        speedMultiplier: 2,
+        speedMultiplier: 1.5,
         formatName: "mp3",
         chunks: [],
         overlapSec: 1,

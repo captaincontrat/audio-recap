@@ -8,7 +8,7 @@ const execFileAsync = promisify(execFile);
 export const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 export const TARGET_UPLOAD_BYTES = 24 * 1024 * 1024;
 export const DEFAULT_CHUNK_OVERLAP_SEC = 1;
-export const DEFAULT_SPEED_MULTIPLIER = 2;
+export const DEFAULT_SPEED_MULTIPLIER = 1.5;
 export const MAX_TRANSCRIBE_DURATION_SEC = 1390;
 export const TARGET_TRANSCRIBE_DURATION_SEC = 600;
 
@@ -108,15 +108,15 @@ export async function prepareAudioForUpload(
   const overlapSec = options.overlapSec ?? DEFAULT_CHUNK_OVERLAP_SEC;
   const speedMultiplier = options.speedMultiplier ?? DEFAULT_SPEED_MULTIPLIER;
 
-  if (speedMultiplier !== 2) {
-    throw new Error(`Only x2 preprocessing is currently supported, received x${speedMultiplier}.`);
+  if (speedMultiplier < 1) {
+    throw new Error(`Only > x1 preprocessing is currently supported, received x${speedMultiplier}.`);
   }
 
   await Promise.all([assertBinaryExists("ffmpeg"), assertBinaryExists("ffprobe")]);
   await mkdir(tempDir, { recursive: true });
 
-  const preparedPath = path.join(tempDir, "prepared-x2.mp3");
-  await preprocessAudio(sourcePath, preparedPath);
+  const preparedPath = path.join(tempDir, `prepared-x${speedMultiplier}.mp3`);
+  await preprocessAudio(sourcePath, preparedPath, speedMultiplier);
 
   const preparedStats = await probeAudioFile(preparedPath);
   const chunks =
@@ -146,14 +146,14 @@ export async function prepareAudioForUpload(
   };
 }
 
-async function preprocessAudio(sourcePath: string, targetPath: string): Promise<void> {
+async function preprocessAudio(sourcePath: string, targetPath: string, speedMultiplier: number): Promise<void> {
   await execFileAsync("ffmpeg", [
     "-y",
     "-i",
     sourcePath,
     "-vn",
     "-filter:a",
-    "atempo=2.0",
+    `atempo=${speedMultiplier}`,
     "-ac",
     PREPARED_AUDIO_CHANNELS,
     "-ar",

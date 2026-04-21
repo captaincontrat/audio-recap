@@ -1,29 +1,37 @@
 import type OpenAI from "openai";
 
 import { formatTimestamp, type TranscriptBlock } from "../domain/transcript.js";
+import { resolveSummaryFormatCatalog, serializeSummaryFormatCatalog, type SummaryFormatDefinition } from "./summary-formats.js";
 
-export async function generateMeetingSummary(
-  client: OpenAI,
-  input: {
-    audioPath: string;
-    notesPath?: string;
-    meetingNotes: string;
-    transcriptBlocks: TranscriptBlock[];
-    outputLanguage?: string;
-  },
-): Promise<string> {
+const SUMMARY_MODEL = "gpt-5.4";
+const SUMMARY_MAX_OUTPUT_TOKENS = 12000;
+
+export interface GenerateMeetingSummaryInput {
+  audioPath: string;
+  notesPath?: string;
+  meetingNotes: string;
+  transcriptBlocks: TranscriptBlock[];
+  outputLanguage?: string;
+  summaryFormats?: string;
+}
+
+export async function generateMeetingSummary(client: OpenAI, input: GenerateMeetingSummaryInput): Promise<string> {
   if (input.transcriptBlocks.length === 0) {
     throw new Error("Cannot generate a summary without transcript blocks.");
   }
 
+  const summaryFormatCatalog = resolveSummaryFormatCatalog(input.summaryFormats);
   const developerPrompt = buildDeveloperPrompt(input.outputLanguage, input.meetingNotes.trim().length > 0);
-  const userPrompt = buildUserPrompt(input);
+  const userPrompt = buildUserPrompt({
+    ...input,
+    summaryFormatCatalog,
+  });
   const response = await client.responses.create({
-    model: "gpt-5.4",
+    model: SUMMARY_MODEL,
     reasoning: {
       effort: "high",
     },
-    max_output_tokens: 12000,
+    max_output_tokens: SUMMARY_MAX_OUTPUT_TOKENS,
     input: [
       {
         role: "developer",
@@ -61,14 +69,19 @@ export function buildDeveloperPrompt(outputLanguage?: string, hasMeetingNotes = 
     "",
     "# Instructions",
     hasMeetingNotes
-      ? "- Analyze the meeting notes first to infer the most useful summary structure for this specific meeting."
-      : "- No meeting notes were provided. Infer the most useful summary structure directly from the transcript blocks.",
+      ? "- Analyze the meeting notes first to infer the most likely meeting type and the most useful summary structure for this specific meeting."
+      : "- No meeting notes were provided. Infer the most likely meeting type and structure directly from the transcript blocks.",
     hasMeetingNotes
-      ? "- Cross-check the inferred structure against the transcript blocks before writing the summary."
-      : "- Base the structure, tone, and conclusions only on the transcript blocks.",
+      ? "- Cross-check the inferred meeting type and structure against the transcript blocks before writing the summary."
+      : "- Base the meeting type, structure, tone, and conclusions only on the transcript blocks.",
     hasMeetingNotes
       ? "- Base every substantive claim only on the provided meeting notes and transcript blocks."
       : "- Base every substantive claim only on the provided transcript blocks.",
+    "- A summary format catalog will be provided in the user message.",
+    "- Compare each available format's `matchDescription` against the meeting evidence before writing.",
+    "- Choose exactly one format before writing the summary. Use `general` when no specialized format is a clear fit.",
+    "- Follow the chosen format's structure and intent, but localize headings to the requested output language.",
+    "- Omit, merge, or rename sections when the source material does not support them. Never pad the summary with empty sections.",
     "- Do not invent participants, decisions, action items, dates, deadlines, risks, or technical details.",
     "- If a point is plausible but not clearly supported, mark it as `A confirmer`.",
     "- Prefer concise, information-dense wording over generic management phrasing.",
@@ -78,14 +91,20 @@ export function buildDeveloperPrompt(outputLanguage?: string, hasMeetingNotes = 
     "# Output contract",
     "- Return Markdown only.",
     "- Start with a single level-1 heading.",
-    "- Choose section headings that best fit the meeting content rather than forcing a rigid template.",
+    "- Use the chosen format as the default outline instead of inventing a different template.",
+    "- Do not reveal the chosen format key, the classification step, or any confidence score.",
     "- Include dedicated sections for decisions, actions, open questions, and risks only when the source material supports them.",
-    "- End with a short `## Next steps` section when concrete next steps are supported by the source material.",
+    "- End with a short `## Next steps` section, or the closest equivalent in the chosen format, when concrete next steps are supported by the source material.",
   ].join("\n");
 }
 
-export function buildUserPrompt(input: { audioPath: string; notesPath?: string; meetingNotes: string; transcriptBlocks: TranscriptBlock[] }): string {
+export function buildUserPrompt(
+  input: GenerateMeetingSummaryInput & {
+    summaryFormatCatalog?: ReadonlyArray<SummaryFormatDefinition>;
+  },
+): string {
   const normalizedMeetingNotes = input.meetingNotes.trim();
+  const summaryFormatCatalog = input.summaryFormatCatalog ?? resolveSummaryFormatCatalog(input.summaryFormats);
   const transcriptBlockPayload = input.transcriptBlocks
     .map((block) => `<BLOCK id="${block.id}" start="${formatTimestamp(block.startSec)}" end="${formatTimestamp(block.endSec)}">\n${block.content}\n</BLOCK>`)
     .join("\n\n");
@@ -96,6 +115,10 @@ export function buildUserPrompt(input: { audioPath: string; notesPath?: string; 
     `Notes file: ${input.notesPath ?? "none"}`,
     "Transcript timestamps refer to the accelerated x2 preprocessing audio that was sent to transcription.",
     "</MEETING_CONTEXT>",
+    "",
+    "<SUMMARY_FORMAT_CATALOG>",
+    serializeSummaryFormatCatalog(summaryFormatCatalog),
+    "</SUMMARY_FORMAT_CATALOG>",
     "",
     "<MEETING_NOTES>",
     normalizedMeetingNotes || "No meeting notes were provided.",

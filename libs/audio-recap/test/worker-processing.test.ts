@@ -38,11 +38,11 @@ const transcriptArtifacts = {
 
 const preparedAudio = {
   sourcePath: "/tmp/source.m4a",
-  preparedPath: "/tmp/prepared.mp3",
+  preparedPath: "/tmp/prepared-x1.5.mp3",
   durationSec: 30,
   sizeBytes: 1024,
   formatName: "mp3",
-  speedMultiplier: 2,
+  speedMultiplier: 1.5,
   overlapSec: 1,
   chunks: [
     {
@@ -133,7 +133,10 @@ describe("processMeetingForWorker", () => {
     });
 
     expect(result.inputKind).toBe("mp3-derivative");
-    expect(result.outputs.durationRatio).toEqual({ value: 2, source: "speed-multiplier" });
+    expect(result.outputs.durationRatio).toEqual({
+      value: 1.5,
+      source: "speed-multiplier",
+    });
     expect(workerMocks.generateMeetingTitle).toHaveBeenCalledWith({}, expect.not.objectContaining({ meetingNotes: expect.anything() }));
     expect(workerMocks.generateMeetingTitle).toHaveBeenCalledWith({}, expect.not.objectContaining({ outputLanguage: expect.anything() }));
     expect(typeof result.outputs.generatedAt).toBe("string");

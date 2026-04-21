@@ -51,6 +51,7 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
         meetingNotes: notesContent,
         ...(resolvedNotesPath ? { notesPath: resolvedNotesPath } : {}),
         ...(options.language ? { outputLanguage: options.language } : {}),
+        ...(options.summaryFormats ? { summaryFormats: options.summaryFormats } : {}),
         overlapSec: DEFAULT_CHUNK_OVERLAP_SEC,
       },
       {
@@ -99,6 +100,7 @@ export function parseCommandLine(argv: string[]): {
   notes?: string;
   outDir: string;
   language?: string;
+  summaryFormats?: string;
   keepTemp: boolean;
 } {
   const { values } = parseArgs({
@@ -114,6 +116,9 @@ export function parseCommandLine(argv: string[]): {
         type: "string",
       },
       language: {
+        type: "string",
+      },
+      "summary-formats": {
         type: "string",
       },
       "keep-temp": {
@@ -144,6 +149,7 @@ export function parseCommandLine(argv: string[]): {
     notes: values.notes,
     outDir: values["out-dir"] ?? ".",
     language: values.language,
+    summaryFormats: values["summary-formats"],
     keepTemp: values["keep-temp"] === true,
   };
 }
@@ -177,13 +183,15 @@ export function printHelp(): void {
   console.log(
     `
 Usage:
-  pnpm process:meeting --audio "/path/to/meeting.m4a" [--notes "/path/to/meeting-notes.md"] [--out-dir "./out"] [--language "fr"] [--keep-temp]
+  pnpm process:meeting --audio "/path/to/meeting.m4a" [--notes "/path/to/meeting-notes.md"] [--out-dir "./out"] [--language "fr"] [--summary-formats '{"formats":[...]}' ] [--keep-temp]
 
 Options:
   --audio       Path to the source meeting audio file.
   --notes       Optional path to the meeting notes markdown file.
   --out-dir     Output directory for transcript.md and summary.md. Defaults to the current directory.
   --language    Optional language hint forwarded to transcription and summary generation.
+  --summary-formats
+                Optional JSON string to override built-in summary formats or add custom meeting types.
   --keep-temp   Keep the intermediate ffmpeg artifacts instead of deleting them.
   -h, --help    Show this help message.
 `.trim(),

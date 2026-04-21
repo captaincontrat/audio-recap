@@ -14,14 +14,16 @@ const transcriptBlocks: TranscriptBlock[] = [
 ];
 
 describe("meeting summary generation", () => {
-  it("builds developer prompts for both explicit and inferred languages", () => {
+  it("builds developer prompts for language selection and format routing", () => {
     expect(buildDeveloperPrompt("fr", true)).toContain("Write the summary in fr.");
     expect(buildDeveloperPrompt(undefined, true)).toContain("dominant language of the meeting notes and transcript.");
     expect(buildDeveloperPrompt(undefined, false)).toContain("No meeting notes were provided.");
     expect(buildDeveloperPrompt(undefined, false)).toContain("dominant language of the transcript");
+    expect(buildDeveloperPrompt(undefined, true)).toContain("Choose exactly one format before writing the summary.");
+    expect(buildDeveloperPrompt(undefined, true)).toContain("Use `general` when no specialized format is a clear fit.");
   });
 
-  it("builds the user prompt with transcript blocks and meeting context", () => {
+  it("builds the user prompt with transcript blocks, meeting context, and the format catalog", () => {
     const prompt = buildUserPrompt({
       audioPath: "/audio/meeting.m4a",
       notesPath: "/notes/meeting.md",
@@ -31,8 +33,31 @@ describe("meeting summary generation", () => {
 
     expect(prompt).toContain("Audio file: /audio/meeting.m4a");
     expect(prompt).toContain("Notes file: /notes/meeting.md");
+    expect(prompt).toContain("<SUMMARY_FORMAT_CATALOG>");
+    expect(prompt).toContain('"key": "general"');
     expect(prompt).toContain('<BLOCK id="block-0001" start="00:00:00" end="00:00:30">');
     expect(prompt).toContain("Action items here");
+  });
+
+  it("includes custom summary formats in the user prompt catalog", () => {
+    const prompt = buildUserPrompt({
+      audioPath: "/audio/meeting.m4a",
+      meetingNotes: "Commercial follow-up",
+      transcriptBlocks,
+      summaryFormats: JSON.stringify({
+        formats: [
+          {
+            key: "upsell-accounting-client",
+            matchDescription: "Upsell meeting with an accounting client.",
+            template: "# [Meeting title]\n## Commercial context\n## Next actions",
+          },
+        ],
+      }),
+    });
+
+    expect(prompt).toContain('"key": "upsell-accounting-client"');
+    expect(prompt).toContain("Upsell meeting with an accounting client.");
+    expect(prompt).toContain("## Commercial context");
   });
 
   it("extracts summary text from direct output and nested content", () => {
@@ -94,6 +119,13 @@ describe("meeting summary generation", () => {
         meetingNotes: "Team sync notes",
         transcriptBlocks,
         outputLanguage: "fr",
+        summaryFormats: JSON.stringify([
+          {
+            key: "client",
+            matchDescription: "Client follow-up meeting.",
+            template: "# [Meeting title]\n## Client recap\n## Next contact",
+          },
+        ]),
       },
     );
 
@@ -115,6 +147,31 @@ describe("meeting summary generation", () => {
         },
       ],
     });
+    const userPrompt = create.mock.calls[0][0].input[1].content as string;
+    expect(userPrompt).toContain('"key": "client"');
+    expect(userPrompt).toContain("## Client recap");
+  });
+
+  it("rejects invalid custom summary format JSON before calling OpenAI", async () => {
+    const create = vi.fn();
+
+    await expect(
+      generateMeetingSummary(
+        {
+          responses: {
+            create,
+          },
+        } as never,
+        {
+          audioPath: "/audio/meeting.m4a",
+          meetingNotes: "Team sync notes",
+          transcriptBlocks,
+          summaryFormats: "{",
+        },
+      ),
+    ).rejects.toThrow("Invalid `summaryFormats` JSON. Expected a JSON array or an object with a `formats` array.");
+
+    expect(create).not.toHaveBeenCalled();
   });
 
   it("surfaces OpenAI empty-summary errors with response details", async () => {

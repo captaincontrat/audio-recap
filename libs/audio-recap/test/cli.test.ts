@@ -122,14 +122,30 @@ describe("cli entrypoint", () => {
       throw new Error(`exit:${code ?? ""}`);
     }) as never);
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+    const summaryFormats = '{"formats":[{"key":"client","matchDescription":"Client follow-up","template":"# [Meeting title]\\n## Client recap"}]}';
 
     expect(() => cli.parseCommandLine(["--help"])).toThrow("exit:0");
     expect(() => cli.parseCommandLine([])).toThrow("Missing required argument: --audio.");
-    expect(cli.parseCommandLine(["--audio", "meeting.m4a", "--notes", "notes.md", "--out-dir", "out", "--language", "fr", "--keep-temp"])).toEqual({
+    expect(
+      cli.parseCommandLine([
+        "--audio",
+        "meeting.m4a",
+        "--notes",
+        "notes.md",
+        "--out-dir",
+        "out",
+        "--language",
+        "fr",
+        "--summary-formats",
+        summaryFormats,
+        "--keep-temp",
+      ]),
+    ).toEqual({
       audio: "meeting.m4a",
       notes: "notes.md",
       outDir: "out",
       language: "fr",
+      summaryFormats,
       keepTemp: true,
     });
 
@@ -227,8 +243,21 @@ describe("cli entrypoint", () => {
     cliMocks.renderTranscriptMarkdown.mockReturnValue("transcript markdown");
     cliMocks.generateMeetingSummary.mockResolvedValue("# Summary");
     cliMocks.renderSummaryMarkdown.mockReturnValue("summary markdown");
+    const summaryFormats = '{"formats":[{"key":"client","matchDescription":"Client follow-up","template":"# [Meeting title]\\n## Client recap"}]}';
 
-    await cli.main(["--audio", "meeting.m4a", "--notes", "notes.md", "--out-dir", "out", "--language", "fr", "--keep-temp"]);
+    await cli.main([
+      "--audio",
+      "meeting.m4a",
+      "--notes",
+      "notes.md",
+      "--out-dir",
+      "out",
+      "--language",
+      "fr",
+      "--summary-formats",
+      summaryFormats,
+      "--keep-temp",
+    ]);
 
     expect(cliMocks.access).toHaveBeenCalledWith("/tmp/invocation/meeting.m4a");
     expect(cliMocks.access).toHaveBeenCalledWith("/tmp/invocation/notes.md");
@@ -241,6 +270,7 @@ describe("cli entrypoint", () => {
         meetingNotes: "notes content",
         notesPath: "/tmp/invocation/notes.md",
         outputLanguage: "fr",
+        summaryFormats,
       }),
     );
     expect(cliMocks.writeFile).toHaveBeenCalledWith("/tmp/invocation/out/transcript.md", "transcript markdown", "utf8");
@@ -294,6 +324,7 @@ describe("cli entrypoint", () => {
     const summaryCallArgs = cliMocks.generateMeetingSummary.mock.calls[0][1] as Record<string, unknown>;
     expect("notesPath" in summaryCallArgs).toBe(false);
     expect("outputLanguage" in summaryCallArgs).toBe(false);
+    expect("summaryFormats" in summaryCallArgs).toBe(false);
     expect(cliMocks.rm).toHaveBeenCalledWith("/tmp/audio-recap-temp", {
       recursive: true,
       force: true,

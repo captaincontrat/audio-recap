@@ -73,6 +73,7 @@ describe("runMeetingPipeline", () => {
 
   it("runs the full pipeline for an original upload and emits stage hooks", async () => {
     const stages: string[] = [];
+    const summaryFormats = '{"formats":[{"key":"client","matchDescription":"Client follow-up","template":"# [Meeting title]\\n## Client recap"}]}';
     const result = await runMeetingPipeline(
       {} as never,
       {
@@ -82,6 +83,7 @@ describe("runMeetingPipeline", () => {
         meetingNotes: "notes body",
         notesPath: "/tmp/notes.md",
         outputLanguage: "fr",
+        summaryFormats,
         overlapSec: 2,
       },
       {
@@ -101,6 +103,7 @@ describe("runMeetingPipeline", () => {
         notesPath: "/tmp/notes.md",
         meetingNotes: "notes body",
         outputLanguage: "fr",
+        summaryFormats,
         transcriptBlocks: transcriptArtifacts.blocks,
       }),
     );
@@ -132,6 +135,21 @@ describe("runMeetingPipeline", () => {
     );
     expect(pipelineMocks.generateMeetingSummary).toHaveBeenCalledWith({}, expect.not.objectContaining({ outputLanguage: expect.anything() }));
     expect(pipelineMocks.generateMeetingSummary).toHaveBeenCalledWith({}, expect.not.objectContaining({ notesPath: expect.anything() }));
+    expect(pipelineMocks.generateMeetingSummary).toHaveBeenCalledWith({}, expect.not.objectContaining({ summaryFormats: expect.anything() }));
     expect(result.inputKind).toBe("mp3-derivative");
+  });
+
+  it("fails before audio preparation when the summary format JSON is invalid", async () => {
+    await expect(
+      runMeetingPipeline({} as never, {
+        inputKind: "original",
+        audioPath: "/tmp/source.m4a",
+        tempDir: "/tmp/work",
+        summaryFormats: "{",
+      }),
+    ).rejects.toThrow("Invalid `summaryFormats` JSON. Expected a JSON array or an object with a `formats` array.");
+
+    expect(pipelineMocks.prepareAudioForUpload).not.toHaveBeenCalled();
+    expect(pipelineMocks.generateMeetingSummary).not.toHaveBeenCalled();
   });
 });

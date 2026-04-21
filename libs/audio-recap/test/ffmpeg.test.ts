@@ -31,7 +31,7 @@ vi.mock("node:fs/promises", () => ({
   stat: ffmpegMocks.stat,
 }));
 
-import { assertBinaryExists, __private__ as ffmpegPrivate, prepareAudioForUpload, probeAudioFile } from "../src/audio/ffmpeg.js";
+import { assertBinaryExists, __private__ as ffmpegPrivate, DEFAULT_SPEED_MULTIPLIER, prepareAudioForUpload, probeAudioFile } from "../src/audio/ffmpeg.js";
 
 type ExecCallback = (error: Error | null, stdout: string, stderr: string) => void;
 
@@ -99,18 +99,40 @@ describe("ffmpeg audio preparation", () => {
     });
 
     expect(ffmpegMocks.mkdir).toHaveBeenCalledWith("/tmp/work", { recursive: true });
+    expect(ffmpegMocks.execFile).toHaveBeenNthCalledWith(
+      3,
+      "ffmpeg",
+      [
+        "-y",
+        "-i",
+        "/tmp/source.m4a",
+        "-vn",
+        "-filter:a",
+        `atempo=${DEFAULT_SPEED_MULTIPLIER}`,
+        "-ac",
+        "1",
+        "-ar",
+        "16000",
+        "-c:a",
+        "libmp3lame",
+        "-b:a",
+        "48k",
+        `/tmp/work/prepared-x${DEFAULT_SPEED_MULTIPLIER}.mp3`,
+      ],
+      expect.any(Function),
+    );
     expect(prepared).toEqual({
       sourcePath: "/tmp/source.m4a",
-      preparedPath: "/tmp/work/prepared-x2.mp3",
+      preparedPath: `/tmp/work/prepared-x${DEFAULT_SPEED_MULTIPLIER}.mp3`,
       durationSec: 120,
       sizeBytes: 1024,
       formatName: "mp3",
-      speedMultiplier: 2,
+      speedMultiplier: DEFAULT_SPEED_MULTIPLIER,
       overlapSec: 2,
       chunks: [
         {
           index: 0,
-          path: "/tmp/work/prepared-x2.mp3",
+          path: `/tmp/work/prepared-x${DEFAULT_SPEED_MULTIPLIER}.mp3`,
           startSec: 0,
           durationSec: 120,
           sizeBytes: 1024,
@@ -124,9 +146,9 @@ describe("ffmpeg audio preparation", () => {
   it("rejects unsupported preprocessing speeds", async () => {
     await expect(
       prepareAudioForUpload("/tmp/source.m4a", "/tmp/work", {
-        speedMultiplier: 1,
+        speedMultiplier: 0.9,
       }),
-    ).rejects.toThrow("Only x2 preprocessing is currently supported, received x1.");
+    ).rejects.toThrow("Only > x1 preprocessing is currently supported, received x0.9.");
   });
 
   it("retries chunk splitting when the first attempt produces oversized chunks", async () => {
@@ -185,7 +207,7 @@ describe("ffmpeg audio preparation", () => {
         targetUploadBytes: 1000,
         overlapSec: 1,
       }),
-    ).rejects.toThrow('Unable to split "/tmp/work/prepared-x2.mp3" into chunks below 1000 bytes after 6 attempts.');
+    ).rejects.toThrow(`Unable to split "/tmp/work/prepared-x${DEFAULT_SPEED_MULTIPLIER}.mp3" into chunks below 1000 bytes after 6 attempts.`);
   });
 
   it("exposes chunk-plan helpers for deterministic edge cases", () => {

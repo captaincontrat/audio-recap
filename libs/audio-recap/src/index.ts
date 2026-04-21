@@ -23,7 +23,14 @@ export {
   type TranscriptBlock,
   type TranscriptSegment,
 } from "./domain/transcript.js";
-export { buildDeveloperPrompt, buildUserPrompt, extractSummaryText, generateMeetingSummary } from "./openai/summarize.js";
+export {
+  BUILT_IN_SUMMARY_FORMATS,
+  GENERAL_SUMMARY_FORMAT_KEY,
+  resolveSummaryFormatCatalog,
+  serializeSummaryFormatCatalog,
+  type SummaryFormatDefinition,
+} from "./openai/summary-formats.js";
+export { buildDeveloperPrompt, buildUserPrompt, extractSummaryText, generateMeetingSummary, type GenerateMeetingSummaryInput } from "./openai/summarize.js";
 export { generateMeetingTitle, sanitizeTitle } from "./openai/title.js";
 export { extractChunkSegments, type TranscriptionResult, transcribePreparedAudio } from "./openai/transcribe.js";
 export {
