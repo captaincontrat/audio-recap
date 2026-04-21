@@ -132,7 +132,7 @@ describe("submitMeeting (task 5.2 — successful normalization end-to-end)", () 
     expect(prepareBody).toMatchObject({
       sourceMediaKind: "video",
       mediaContentType: "audio/mpeg",
-      mediaFilename: "kickoff.mov",
+      mediaFilename: "kickoff.mp3",
       normalization: { kind: "succeeded", inputKind: "mp3-derivative" },
     });
     expect(uploadedBody).toBe(mp3Derivative);

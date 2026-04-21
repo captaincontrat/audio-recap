@@ -20,6 +20,14 @@
 import { registerMp3Encoder } from "@mediabunny/mp3-encoder";
 import { ALL_FORMATS, BlobSource, BufferTarget, Conversion, ConversionCanceledError, canEncodeAudio, Input, Mp3OutputFormat, Output } from "mediabunny";
 
+// Speech-focused encoding profile. A fixed low bitrate plus mono output
+// is materially smaller than the library's default `QUALITY_HIGH`
+// transcode target while remaining sufficient for meeting
+// transcription/summarization.
+const MP3_TARGET_BITRATE = 64_000;
+const MP3_TARGET_CHANNELS = 1;
+const MP3_TARGET_SAMPLE_RATE = 32_000;
+
 export type MediaNormalizationSource = {
   file: File;
   kind: "audio" | "video";
@@ -90,7 +98,15 @@ export async function normalizeMediaForSubmission(source: MediaNormalizationSour
 
   let conversion: Conversion;
   try {
-    conversion = await Conversion.init({ input, output });
+    conversion = await Conversion.init({
+      input,
+      output,
+      audio: {
+        bitrate: MP3_TARGET_BITRATE,
+        numberOfChannels: MP3_TARGET_CHANNELS,
+        sampleRate: MP3_TARGET_SAMPLE_RATE,
+      },
+    });
   } catch {
     if (source.signal?.aborted) {
       throw makeAbortError();

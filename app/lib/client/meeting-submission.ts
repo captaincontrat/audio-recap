@@ -139,7 +139,7 @@ export async function submitMeeting(inputs: SubmitMeetingInputs): Promise<Submit
     sourceMediaKind: mediaKind,
     mediaBytes: uploadFile.size,
     mediaContentType: uploadContentType,
-    mediaFilename: inputs.file.name,
+    mediaFilename: uploadFile.name,
     ...(notes ? { notesText: notes } : {}),
     normalization: normalization.outcome,
   });

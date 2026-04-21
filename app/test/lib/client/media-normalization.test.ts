@@ -198,6 +198,13 @@ describe("normalizeMediaForSubmission (tasks 4.1–4.5)", () => {
     expect(result.file.type).toBe("audio/mpeg");
     expect(result.file).not.toBe(original);
     expect(mocks.initFn).toHaveBeenCalledTimes(1);
+    expect(mocks.initFn.mock.calls[0]?.[0]).toMatchObject({
+      audio: {
+        bitrate: 64_000,
+        numberOfChannels: 1,
+        sampleRate: 32_000,
+      },
+    });
   });
 
   test("4.1b filenames without an extension still get a `.mp3` suffix", async () => {
